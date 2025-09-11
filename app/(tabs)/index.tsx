@@ -1,8 +1,6 @@
 import { Text, View, StyleSheet } from 'react-native';
 import {Link} from 'expo-router';
 import {Image} from 'expo-image';
-import ImageViewer from '@/.expo/components/ImageViewer';
-import Button from '@/.expo/components/Button';
 
 const WhatflyImage = require('@/assets/images/square_cutthroat.jpg');
 const LogImage = require('@/assets/images/glowing_tent.jpeg');
@@ -14,21 +12,18 @@ export default function Index() {
       <View style={styles.imageContainer} >
         <Link href='/whatfly' >
           <View style={styles.buttonContainer}>
-            <ImageViewer imgSource={WhatflyImage} />
+            <Image source={WhatflyImage} style={styles.image} />
             <Text style={styles.buttonLabel}>What Fly</Text>
           </View>
         </Link>
       
         <Link href='/catchlog' >
           <View style={styles.buttonContainer}>
-            <ImageViewer imgSource={LogImage} />
+            <Image source={LogImage} style={styles.image} />
             <Text style={styles.buttonLabel}>Catch Log</Text>
           </View>
         </Link>
       </View>
-      {/* <View style={styles.footerContainer}>
-        <Button theme='primary' label="Choose a photo" />
-      </View> */}
     </View>
   );
 }
@@ -59,5 +54,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
+  },
+  image: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   }
 });
