@@ -23,6 +23,11 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+    "extra": {
+      "eas": {
+        "projectId": "whatfly-app"
+      }
+    },
     "plugins": [
       "expo-router",
       [
