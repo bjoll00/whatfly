@@ -100,7 +100,7 @@ export default function TabLayout() {
         ),
         }} />
         <Tabs.Screen name="whatfly/index" options={{ title: 'What Fly', tabBarIcon: ({ color, focused }) => (
-            <AntDesign name={focused ?'questioncircleo' : 'questioncircleo'} size={24} color={color} />
+            <AntDesign name={focused ? 'question-circle' : 'question-circle'} size={24} color={color} />
         ),
     }}/>
         <Tabs.Screen name="catchlog" options={{ title: 'Catch Log', tabBarIcon: ({ color, focused }) => (

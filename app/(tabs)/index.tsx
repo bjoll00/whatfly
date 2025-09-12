@@ -1,9 +1,9 @@
-import { Text, View, StyleSheet } from 'react-native';
-import {Link} from 'expo-router';
-import {Image} from 'expo-image';
+import { Image } from 'expo-image';
+import { Link } from 'expo-router';
+import { StyleSheet, Text, View } from 'react-native';
 
 const WhatflyImage = require('@/assets/images/square_cutthroat.jpg');
-const LogImage = require('@/assets/images/glowing_tent.jpeg');
+const LogImage = require('@/assets/images/tent_image.jpg');
 
 
 export default function Index() {
@@ -39,7 +39,8 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: 60,
   },
   footerContainer: {
     flex: 1 / 3,
@@ -47,17 +48,18 @@ const styles = StyleSheet.create({
   },
   buttonContainer:{
     alignItems: 'center',
-    margin: 10,
+    marginVertical: 20,
+    marginHorizontal: 20,
   },
   buttonLabel: {
-    marginTop: 6,
-    fontSize: 16,
+    marginTop: 12,
+    fontSize: 20,
     fontWeight: '600',
     color: 'white',
   },
   image: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 150,
+    height: 150,
+    borderRadius: 15,
   }
 });

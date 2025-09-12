@@ -71,13 +71,56 @@ export const fishingLogsService = {
   },
 
   // Delete a fishing log
-  async deleteLog(id: string): Promise<void> {
-    const { error } = await supabase
-      .from(TABLES.FISHING_LOGS)
-      .delete()
-      .eq('id', id);
+  async deleteLog(id: string, userId?: string): Promise<void> {
+    console.log('Deleting fishing log with ID:', id, 'for user:', userId);
+    
+    try {
+      // First, let's check if the log exists and belongs to the user
+      const { data: existingLog, error: fetchError } = await supabase
+        .from(TABLES.FISHING_LOGS)
+        .select('id, user_id')
+        .eq('id', id)
+        .single();
 
-    if (error) throw error;
+      if (fetchError) {
+        console.error('Error fetching log to delete:', fetchError);
+        throw new Error(`Log not found: ${fetchError.message}`);
+      }
+
+      if (!existingLog) {
+        throw new Error('Log not found');
+      }
+
+      console.log('Found log to delete:', existingLog);
+
+      // Try RLS approach first
+      let { error } = await supabase
+        .from(TABLES.FISHING_LOGS)
+        .delete()
+        .eq('id', id);
+
+      // If RLS fails and we have userId, try with explicit user_id filter
+      if (error && userId) {
+        console.log('RLS delete failed, trying with user_id filter:', error.message);
+        const { error: userFilterError } = await supabase
+          .from(TABLES.FISHING_LOGS)
+          .delete()
+          .eq('id', id)
+          .eq('user_id', userId);
+        
+        error = userFilterError;
+      }
+
+      if (error) {
+        console.error('Error deleting fishing log:', error);
+        throw new Error(`Delete failed: ${error.message}`);
+      }
+      
+      console.log('Fishing log deleted successfully');
+    } catch (error) {
+      console.error('Delete operation failed:', error);
+      throw error;
+    }
   },
 };
 

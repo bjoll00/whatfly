@@ -47,77 +47,90 @@ export class FlySuggestionService {
     time_of_day: string;
     water_temperature?: number;
   }): FlySuggestion {
-    let score = 30; // Base score so all flies get some points
+    let score = 5; // Very low base score so condition matching dominates
     let reasons: string[] = [];
 
-    // Base score from success rate
-    score += fly.success_rate * 30;
+    // Base score from success rate (minimal impact)
+    const cappedSuccessRate = Math.min(fly.success_rate, 0.7); // Cap at 70%
+    score += cappedSuccessRate * 5; // Very small impact
 
-    // Usage-based ranking boost (popular flies get higher scores)
+    // Usage-based ranking boost (minimal - condition matching is most important)
     if (fly.total_uses > 0) {
-      // Logarithmic scaling so popular flies get boost but not overwhelming
-      const usageBoost = Math.log10(fly.total_uses + 1) * 15;
+      // Tiny boost for popularity
+      const usageBoost = Math.log10(fly.total_uses + 1) * 1; // Minimal impact
       score += usageBoost;
-      reasons.push(`Popular choice (${fly.total_uses} uses)`);
-    }
-
-    // Weather conditions match
-    if (fly.best_conditions.weather.includes(conditions.weather_conditions)) {
-      score += 25;
-      reasons.push(`Good for ${conditions.weather_conditions} weather`);
-    } else {
-      score += 5; // Still give some points for having weather data
-    }
-
-    // Water clarity match
-    if (fly.best_conditions.water_clarity.includes(conditions.water_clarity)) {
-      score += 20;
-      reasons.push(`Effective in ${conditions.water_clarity} water`);
-    } else {
-      score += 3; // Still give some points
-    }
-
-    // Water level match
-    if (fly.best_conditions.water_level.includes(conditions.water_level)) {
-      score += 20;
-      reasons.push(`Works well with ${conditions.water_level} water levels`);
-    } else {
-      score += 3; // Still give some points
-    }
-
-    // Time of day match
-    if (fly.best_conditions.time_of_day.includes(conditions.time_of_day)) {
-      score += 15;
-      reasons.push(`Best during ${conditions.time_of_day}`);
-    } else {
-      score += 2; // Still give some points
-    }
-
-    // Water temperature match
-    if (conditions.water_temperature && fly.best_conditions.water_temperature_range) {
-      const { min, max } = fly.best_conditions.water_temperature_range;
-      if (conditions.water_temperature >= min && conditions.water_temperature <= max) {
-        score += 20;
-        reasons.push(`Optimal water temperature range`);
-      } else {
-        score += 5; // Still give some points
+      if (fly.total_uses > 50) {
+        reasons.push(`Popular choice (${fly.total_uses} uses)`);
       }
     }
 
-    // Add bonus for high success rate
-    if (fly.success_rate > 0.7) {
-      score += 15;
+    // Weather conditions match - HIGHEST PRIORITY
+    if (fly.best_conditions.weather.includes(conditions.weather_conditions)) {
+      score += 80; // Very high score for weather match
+      reasons.push(`Excellent for ${conditions.weather_conditions} weather`);
+    } else {
+      score -= 50; // Heavy penalty for weather mismatch
+    }
+
+    // Time of day/season match - HIGHEST PRIORITY
+    if (fly.best_conditions.time_of_day.includes(conditions.time_of_day)) {
+      score += 75; // Very high score for season match
+      reasons.push(`Perfect for ${conditions.time_of_day} season`);
+    } else {
+      score -= 45; // Heavy penalty for season mismatch
+    }
+
+    // Water temperature match - SEASONAL IMPORTANCE
+    if (conditions.water_temperature && fly.best_conditions.water_temperature_range) {
+      const { min, max } = fly.best_conditions.water_temperature_range;
+      if (conditions.water_temperature >= min && conditions.water_temperature <= max) {
+        score += 50; // High score for temperature match
+        reasons.push(`Ideal water temperature for this season`);
+      } else {
+        score -= 30; // Heavy penalty for temperature mismatch
+      }
+    }
+
+    // Water clarity match (secondary importance)
+    if (fly.best_conditions.water_clarity.includes(conditions.water_clarity)) {
+      score += 25; // Moderate score for clarity match
+      reasons.push(`Effective in ${conditions.water_clarity} water`);
+    } else {
+      score -= 10; // Moderate penalty for clarity mismatch
+    }
+
+    // Water level match (secondary importance)
+    if (fly.best_conditions.water_level.includes(conditions.water_level)) {
+      score += 25; // Moderate score for level match
+      reasons.push(`Works well with ${conditions.water_level} water levels`);
+    } else {
+      score -= 10; // Moderate penalty for level mismatch
+    }
+
+    // MEGA BONUS: Perfect weather and season match
+    const weatherMatch = fly.best_conditions.weather.includes(conditions.weather_conditions);
+    const seasonMatch = fly.best_conditions.time_of_day.includes(conditions.time_of_day);
+    if (weatherMatch && seasonMatch) {
+      score += 40; // Huge bonus for matching both weather and season
+      reasons.push('Perfect weather and season combination');
+    }
+
+    // Add small bonus for high success rate (minimal)
+    if (fly.success_rate > 0.8) {
+      score += 2; // Very small bonus
       reasons.push('High success rate');
     }
 
-    // Add bonus for recent success
-    if (fly.total_uses > 10) {
-      score += 10;
+    // Add tiny bonus for well-tested flies (minimal)
+    if (fly.total_uses > 20) {
+      score += 1; // Tiny bonus
       reasons.push('Well-tested fly');
     }
 
     // Ensure minimum confidence
-    const confidence = Math.min(100, Math.max(20, score));
+    const confidence = Math.min(100, Math.max(5, score));
+
+    console.log(`Fly: ${fly.name}, Score: ${score}, Confidence: ${confidence}, Reasons: ${reasons.join(', ')}`);
 
     return {
       fly,
@@ -227,3 +240,4 @@ export class FlySuggestionService {
 }
 
 export const flySuggestionService = new FlySuggestionService();
+

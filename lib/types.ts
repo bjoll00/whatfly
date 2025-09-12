@@ -57,6 +57,7 @@ export interface FishingConditions {
   weather_conditions: 'sunny' | 'cloudy' | 'overcast' | 'rainy' | 'stormy' | 'foggy';
   water_conditions: 'calm' | 'rippled' | 'choppy' | 'fast_moving' | 'turbulent' | 'still';
   water_temperature_range: 'very_cold' | 'cold' | 'cool' | 'moderate' | 'warm' | 'hot';
+  water_temperature?: number; // Optional specific temperature in degrees
   air_temperature_range: 'very_cold' | 'cold' | 'cool' | 'moderate' | 'warm' | 'hot';
   wind_speed: 'none' | 'light' | 'moderate' | 'strong' | 'very_strong';
   wind_direction: 'north' | 'northeast' | 'east' | 'southeast' | 'south' | 'southwest' | 'west' | 'northwest' | 'variable';

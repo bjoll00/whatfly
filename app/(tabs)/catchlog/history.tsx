@@ -15,19 +15,22 @@ export default function HistoryScreen() {
   const [logs, setLogs] = useState<FishingLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [deletingLogId, setDeletingLogId] = useState<string | null>(null);
 
   const loadLogs = async () => {
     try {
       const userId = await getCurrentUserId();
+      
       if (!userId) {
         setLogs([]);
         return;
       }
+      
       const userLogs = await fishingLogsService.getLogs(userId);
       setLogs(userLogs);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load fishing logs.');
       console.error('Error loading logs:', error);
+      Alert.alert('Error', 'Failed to load fishing logs.');
     } finally {
       setIsLoading(false);
     }
@@ -40,26 +43,43 @@ export default function HistoryScreen() {
   };
 
   const deleteLog = async (logId: string) => {
-    Alert.alert(
-      'Delete Log',
-      'Are you sure you want to delete this fishing log?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await fishingLogsService.deleteLog(logId);
-              setLogs(prev => prev.filter(log => log.id !== logId));
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete fishing log.');
-              console.error('Error deleting log:', error);
-            }
-          },
-        },
-      ]
-    );
+    // Prevent double-clicks
+    if (deletingLogId === logId) {
+      return;
+    }
+    
+    // Use confirm for web compatibility
+    const confirmed = window.confirm('Are you sure you want to delete this fishing log?');
+    
+    if (!confirmed) {
+      return;
+    }
+    
+    setDeletingLogId(logId);
+    
+    try {
+      // Check if user is authenticated
+      const userId = await getCurrentUserId();
+      
+      if (!userId) {
+        alert('Error: You must be logged in to delete logs.');
+        return;
+      }
+      
+      await fishingLogsService.deleteLog(logId, userId);
+      
+      setLogs(prev => {
+        const newLogs = prev.filter(log => log.id !== logId);
+        return newLogs;
+      });
+      
+      alert('Fishing log deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting log:', error);
+      alert(`Failed to delete fishing log: ${error.message || 'Unknown error'}`);
+    } finally {
+      setDeletingLogId(null);
+    }
   };
 
   useEffect(() => {
@@ -83,63 +103,43 @@ export default function HistoryScreen() {
           <Text style={styles.dateText}>{formatDate(item.date)}</Text>
         </View>
         <TouchableOpacity
-          style={styles.deleteButton}
+          style={[styles.deleteButton, deletingLogId === item.id && styles.deleteButtonDisabled]}
           onPress={() => deleteLog(item.id)}
+          disabled={deletingLogId === item.id}
         >
-          <Text style={styles.deleteButtonText}>×</Text>
+          <Text style={styles.deleteButtonText}>
+            {deletingLogId === item.id ? '...' : '×'}
+          </Text>
         </TouchableOpacity>
       </View>
-
+      
       <View style={styles.conditionsRow}>
         <View style={styles.conditionItem}>
           <Text style={styles.conditionLabel}>Weather</Text>
-          <Text style={styles.conditionValue}>
-            {item.weather_conditions.replace('_', ' ').toUpperCase()}
-          </Text>
+          <Text style={styles.conditionValue}>{item.weather_conditions}</Text>
         </View>
         <View style={styles.conditionItem}>
-          <Text style={styles.conditionLabel}>Clarity</Text>
-          <Text style={styles.conditionValue}>
-            {item.water_clarity.replace('_', ' ').toUpperCase()}
-          </Text>
+          <Text style={styles.conditionLabel}>Water Clarity</Text>
+          <Text style={styles.conditionValue}>{item.water_clarity}</Text>
         </View>
         <View style={styles.conditionItem}>
-          <Text style={styles.conditionLabel}>Level</Text>
-          <Text style={styles.conditionValue}>
-            {item.water_level.replace('_', ' ').toUpperCase()}
-          </Text>
+          <Text style={styles.conditionLabel}>Water Level</Text>
+          <Text style={styles.conditionValue}>{item.water_level}</Text>
         </View>
       </View>
 
       <View style={styles.timeRow}>
         <View style={styles.timeItem}>
           <Text style={styles.timeLabel}>Time of Day</Text>
+          <Text style={styles.timeValue}>{item.time_of_day}</Text>
+        </View>
+        <View style={styles.timeItem}>
+          <Text style={styles.timeLabel}>Water Temp</Text>
           <Text style={styles.timeValue}>
-            {item.time_of_day.replace('_', ' ').toUpperCase()}
+            {item.water_temperature ? `${item.water_temperature}°F` : 'N/A'}
           </Text>
         </View>
-        {item.time_of_year && (
-          <View style={styles.timeItem}>
-            <Text style={styles.timeLabel}>Season</Text>
-            <Text style={styles.timeValue}>
-              {item.time_of_year.replace('_', ' ').toUpperCase()}
-            </Text>
-          </View>
-        )}
       </View>
-
-      {item.water_temperature && (
-        <View style={styles.tempRow}>
-          <Text style={styles.tempText}>
-            Water: {item.water_temperature}°F
-          </Text>
-          {item.air_temperature && (
-            <Text style={styles.tempText}>
-              Air: {item.air_temperature}°F
-            </Text>
-          )}
-        </View>
-      )}
 
       {item.flies_used && item.flies_used.length > 0 && (
         <View style={styles.fliesSection}>
@@ -150,16 +150,16 @@ export default function HistoryScreen() {
                 key={index}
                 style={[
                   styles.flyChip,
-                  item.successful_flies?.includes(fly) && styles.successfulFlyChip,
+                  fly.successful && styles.successfulFlyChip,
                 ]}
               >
                 <Text
                   style={[
                     styles.flyText,
-                    item.successful_flies?.includes(fly) && styles.successfulFlyText,
+                    fly.successful && styles.successfulFlyText,
                   ]}
                 >
-                  {fly}
+                  {fly.name}
                 </Text>
               </View>
             ))}
@@ -167,17 +167,15 @@ export default function HistoryScreen() {
         </View>
       )}
 
-      {item.fish_caught > 0 && (
-        <View style={styles.catchSection}>
-          <Text style={styles.catchText}>
-            🐟 {item.fish_caught} fish caught
-          </Text>
-        </View>
-      )}
+      <View style={styles.catchSection}>
+        <Text style={styles.catchText}>
+          Fish Caught: {item.fish_caught}
+        </Text>
+      </View>
 
       {item.notes && (
         <View style={styles.notesSection}>
-          <Text style={styles.notesText}>{item.notes}</Text>
+          <Text style={styles.notesText}>Notes: {item.notes}</Text>
         </View>
       )}
     </View>
@@ -269,8 +267,13 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
+    lineHeight: 20,
+  },
+  deleteButtonDisabled: {
+    backgroundColor: '#666',
+    opacity: 0.6,
   },
   conditionsRow: {
     flexDirection: 'row',

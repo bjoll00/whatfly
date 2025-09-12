@@ -24,6 +24,7 @@ export default function WhatFlyScreen() {
     water_level: 'normal',
     time_of_day: 'morning',
     time_of_year: 'summer',
+    water_temperature: undefined,
   });
 
   const [suggestions, setSuggestions] = useState<FlySuggestion[]>([]);
@@ -66,6 +67,7 @@ export default function WhatFlyScreen() {
       water_level: 'normal',
       time_of_day: 'morning',
       time_of_year: 'summer',
+      water_temperature: undefined,
     });
     setSuggestions([]);
   };
@@ -196,6 +198,22 @@ export default function WhatFlyScreen() {
               <Picker.Item label="🌊 Flooding" value="flooding" />
             </Picker>
           </View>
+        </View>
+
+        {/* Water Temperature */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Water Temperature (Optional)</Text>
+          <TextInput
+            style={styles.input}
+            value={conditions.water_temperature?.toString() || ''}
+            onChangeText={(text) => {
+              const temp = text ? parseFloat(text) : undefined;
+              handleInputChange('water_temperature', temp);
+            }}
+            placeholder="Enter temperature in °F (e.g., 65)"
+            placeholderTextColor="#666"
+            keyboardType="numeric"
+          />
         </View>
 
 
@@ -356,7 +374,7 @@ const styles = StyleSheet.create({
   },
   button: {
     padding: 15,
-    borderRadius: 8,
+    borderRadius: 0,
     flex: 1,
     alignItems: 'center',
   },
