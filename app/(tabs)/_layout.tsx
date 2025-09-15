@@ -2,8 +2,10 @@ import AntDesign from '@expo/vector-icons/AntDesign';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Redirect, Tabs } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, TouchableOpacity } from 'react-native';
+import { Alert, Image, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../lib/AuthContext';
+
+const BrownTroutLogo = require('@/assets/images/Brown_trout_logo (2).png');
 
 export default function TabLayout() {
   const { user, signOut } = useAuth();
@@ -63,6 +65,47 @@ export default function TabLayout() {
     }
   };
 
+  const HeaderLeft = () => (
+    <View style={{ 
+      flex: 1, 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      paddingTop: 8,
+      paddingBottom: 8,
+      minHeight: 60
+    }}>
+      <Image 
+        source={BrownTroutLogo} 
+        style={{ 
+          width: 200, 
+          height: 80,
+          maxWidth: '90%'
+        }} 
+        resizeMode="contain" 
+      />
+    </View>
+  );
+
+  const HeaderRight = () => (
+    <TouchableOpacity 
+      onPress={() => {
+        console.log('TabLayout: TouchableOpacity pressed');
+        handleDirectSignOut();
+      }} 
+      style={{ 
+        marginRight: 15,
+        opacity: isSigningOut ? 0.5 : 1 
+      }}
+      disabled={isSigningOut}
+    >
+      <Ionicons 
+        name={isSigningOut ? "hourglass-outline" : "log-out-outline"} 
+        size={24} 
+        color="#ffd33d" 
+      />
+    </TouchableOpacity>
+  );
+
   return (
     <Tabs
         screenOptions={{
@@ -75,22 +118,9 @@ export default function TabLayout() {
             tabBarStyle: {
                 backgroundColor: '#25292e',
             },
-            headerRight: () => (
-              <TouchableOpacity 
-                onPress={() => {
-                  console.log('TabLayout: TouchableOpacity pressed');
-                  handleDirectSignOut();
-                }} 
-                style={{ marginRight: 15, opacity: isSigningOut ? 0.5 : 1 }}
-                disabled={isSigningOut}
-              >
-                <Ionicons 
-                  name={isSigningOut ? "hourglass-outline" : "log-out-outline"} 
-                  size={24} 
-                  color="#ffd33d" 
-                />
-              </TouchableOpacity>
-            ),
+            headerLeft: () => <HeaderLeft />,
+            headerRight: () => <HeaderRight />,
+            headerTitle: '',
         }}
         >
 

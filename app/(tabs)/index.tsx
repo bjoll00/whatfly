@@ -2,8 +2,8 @@ import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-const WhatflyImage = require('@/assets/images/square_cutthroat.jpg');
-const LogImage = require('@/assets/images/tent_image.jpg');
+const WhatflyImage = require('@/assets/images/grasshopper.jpg');
+const LogImage = require('@/assets/images/square_cutthroat.jpg');
 
 
 export default function Index() {

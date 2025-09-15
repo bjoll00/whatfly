@@ -2,7 +2,8 @@ import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-const LogImage = require('@/assets/images/square_cutthroat.jpg');
+const NewLogImage = require('@/assets/images/mountain_lake.jpg');
+const HistoryImage = require('@/assets/images/brady_tent.jpg');
 
 export default function CatchLogScreen() {
   return (
@@ -10,14 +11,14 @@ export default function CatchLogScreen() {
       <View style={styles.imageContainer}>
         <Link href="/catchlog/newlog">
           <View style={styles.buttonContainer}>
-            <Image source={LogImage} style={styles.image} />
+            <Image source={NewLogImage} style={styles.image} />
             <Text style={styles.buttonLabel}>New Log</Text>
           </View>
         </Link>
 
         <Link href="/catchlog/history">
           <View style={styles.buttonContainer}>
-            <Image source={LogImage} style={styles.image} />
+            <Image source={HistoryImage} style={styles.image} />
             <Text style={styles.buttonLabel}>History</Text>
           </View>
         </Link>

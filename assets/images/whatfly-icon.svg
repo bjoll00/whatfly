@@ -1,0 +1,60 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e3a8a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="waterGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0ea5e9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0284c7;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="flyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="url(#bgGradient)" stroke="#1e40af" stroke-width="8"/>
+  
+  <!-- Water waves at bottom -->
+  <path d="M 80 320 Q 128 300 176 320 T 272 320 T 368 320 T 432 320 L 432 400 L 80 400 Z" fill="url(#waterGradient)"/>
+  <path d="M 80 340 Q 128 320 176 340 T 272 340 T 368 340 T 432 340 L 432 400 L 80 400 Z" fill="#0c4a6e" opacity="0.6"/>
+  
+  <!-- Fishing line -->
+  <path d="M 256 120 Q 256 200 256 280" stroke="#ffffff" stroke-width="3" fill="none" stroke-dasharray="5,5"/>
+  
+  <!-- Fly fishing fly -->
+  <g transform="translate(256, 280)">
+    <!-- Hook -->
+    <path d="M -8 0 Q -12 8 -8 16 Q -4 20 0 16 Q 4 20 8 16 Q 12 8 8 0" stroke="#8b5cf6" stroke-width="2" fill="none"/>
+    
+    <!-- Body -->
+    <ellipse cx="0" cy="0" rx="12" ry="6" fill="url(#flyGradient)"/>
+    
+    <!-- Wings -->
+    <path d="M -8 -6 Q -16 -12 -8 -18 Q 0 -12 -8 -6" fill="#fbbf24" opacity="0.8"/>
+    <path d="M 8 -6 Q 16 -12 8 -18 Q 0 -12 8 -6" fill="#fbbf24" opacity="0.8"/>
+    
+    <!-- Tail -->
+    <path d="M 0 6 Q -4 12 0 18 Q 4 12 0 6" fill="#f59e0b"/>
+    
+    <!-- Details -->
+    <circle cx="-4" cy="-2" r="1" fill="#1f2937"/>
+    <circle cx="4" cy="-2" r="1" fill="#1f2937"/>
+  </g>
+  
+  <!-- Decorative elements - small fish -->
+  <g transform="translate(120, 200)">
+    <ellipse cx="0" cy="0" rx="8" ry="4" fill="#fbbf24" opacity="0.7"/>
+    <path d="M 8 0 Q 12 -4 16 0 Q 12 4 8 0" fill="#fbbf24" opacity="0.7"/>
+    <circle cx="-2" cy="-1" r="1" fill="#1f2937"/>
+  </g>
+  
+  <g transform="translate(380, 180)">
+    <ellipse cx="0" cy="0" rx="6" ry="3" fill="#fbbf24" opacity="0.5"/>
+    <path d="M 6 0 Q 9 -3 12 0 Q 9 3 6 0" fill="#fbbf24" opacity="0.5"/>
+    <circle cx="-1" cy="-1" r="0.5" fill="#1f2937"/>
+  </g>
+</svg>

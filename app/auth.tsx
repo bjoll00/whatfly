@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 import React, { useState } from 'react';
 import {
     Alert,
+    Image,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -13,12 +14,15 @@ import {
 } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 
+const WhatFlyLogo = require('@/assets/images/WhatFlyFishingLogo.png');
+
 export default function AuthScreen() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
+  const [showVerificationMessage, setShowVerificationMessage] = useState(false);
   const { user, signIn, signUp, refreshAuth } = useAuth();
 
   // If user is already authenticated, redirect to home
@@ -51,21 +55,11 @@ export default function AuthScreen() {
         } else {
           console.log('Sign up success:', data);
           setStatus('Account created!');
-          Alert.alert(
-            'Account Created!', 
-            'Please check your email and click the verification link before you can sign in.',
-            [
-              { 
-                text: 'OK', 
-                onPress: () => {
-                  setIsSignUp(false);
-                  setEmail('');
-                  setPassword('');
-                  setStatus('');
-                }
-              }
-            ]
-          );
+          setShowVerificationMessage(true);
+          // Clear form and switch to sign in mode
+          setIsSignUp(false);
+          setEmail('');
+          setPassword('');
         }
       } else {
         setStatus('Signing in...');
@@ -97,7 +91,7 @@ export default function AuthScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
-          <Text style={styles.title}>WhatFly</Text>
+          <Image source={WhatFlyLogo} style={styles.logo} resizeMode="contain" />
           <Text style={styles.subtitle}>
             {isSignUp ? 'Create your account' : 'Welcome back!'}
           </Text>
@@ -153,6 +147,21 @@ export default function AuthScreen() {
             </Text>
           </TouchableOpacity>
 
+          {showVerificationMessage ? (
+            <View style={styles.verificationContainer}>
+              <Text style={styles.verificationTitle}>Check Your Email!</Text>
+              <Text style={styles.verificationText}>
+                We've sent you a verification link at {email}. Please check your email and click the link to verify your account before signing in.
+              </Text>
+              <TouchableOpacity
+                style={styles.verificationButton}
+                onPress={() => setShowVerificationMessage(false)}
+              >
+                <Text style={styles.verificationButtonText}>Got it!</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {status ? (
             <View style={styles.statusContainer}>
               <Text style={styles.statusText}>{status}</Text>
@@ -179,11 +188,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ffd33d',
-    marginBottom: 8,
+  logo: {
+    width: 525,
+    height: 225,
+    marginBottom: 20,
   },
   subtitle: {
     fontSize: 18,
@@ -248,5 +256,39 @@ const styles = StyleSheet.create({
     color: '#ffd33d',
     fontSize: 14,
     textAlign: 'center',
+  },
+  verificationContainer: {
+    marginTop: 20,
+    padding: 20,
+    backgroundColor: '#1a4d3a',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#4ade80',
+    alignItems: 'center',
+  },
+  verificationTitle: {
+    color: '#4ade80',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  verificationText: {
+    color: '#e5e7eb',
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  verificationButton: {
+    backgroundColor: '#4ade80',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  verificationButtonText: {
+    color: '#1a4d3a',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatFly Logo Preview</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .logo-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+            margin: 20px 0;
+        }
+        .logo-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .logo-item img {
+            border: 2px solid #333;
+            border-radius: 10px;
+        }
+        .size-label {
+            font-size: 14px;
+            color: #ccc;
+        }
+        h1 {
+            color: #fbbf24;
+        }
+        .description {
+            color: #cbd5e1;
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <h1>WhatFly Logo Preview</h1>
+    <div class="description">
+        <p>Here's your new WhatFly logo! The design features:</p>
+        <ul style="text-align: left; max-width: 400px; margin: 0 auto;">
+            <li>Deep blue gradient background representing water</li>
+            <li>Water waves at the bottom</li>
+            <li>A detailed fly fishing fly with hook, body, wings, and tail</li>
+            <li>Fishing line with dashed pattern</li>
+            <li>Small decorative fish elements</li>
+            <li>Clean, modern typography for the app name</li>
+        </ul>
+    </div>
+    
+    <div class="logo-container">
+        <div class="logo-item">
+            <h3>Main Logo (with text)</h3>
+            <img src="assets/images/whatfly-logo.svg" alt="WhatFly Logo" style="width: 300px; height: 300px;">
+            <div class="size-label">SVG - Scalable Vector</div>
+        </div>
+        
+        <div class="logo-item">
+            <h3>App Icon (without text)</h3>
+            <img src="assets/images/whatfly-icon.svg" alt="WhatFly Icon" style="width: 200px; height: 200px;">
+            <div class="size-label">SVG - For app icons</div>
+        </div>
+        
+        <div class="logo-item">
+            <h3>PNG Versions</h3>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
+                <div>
+                    <img src="assets/images/icon-512.png" alt="512px" style="width: 128px; height: 128px;">
+                    <div class="size-label">512px</div>
+                </div>
+                <div>
+                    <img src="assets/images/icon-256.png" alt="256px" style="width: 64px; height: 64px;">
+                    <div class="size-label">256px</div>
+                </div>
+                <div>
+                    <img src="assets/images/icon-128.png" alt="128px" style="width: 32px; height: 32px;">
+                    <div class="size-label">128px</div>
+                </div>
+                <div>
+                    <img src="assets/images/icon-32.png" alt="32px" style="width: 16px; height: 16px;">
+                    <div class="size-label">32px</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div style="margin-top: 40px; padding: 20px; background: #2a2a2a; border-radius: 10px; max-width: 600px; margin-left: auto; margin-right: auto;">
+        <h3>Usage in Your App</h3>
+        <p>The logo files are now properly configured in your app.json:</p>
+        <ul style="text-align: left;">
+            <li><strong>icon.png</strong> - Main app icon (512x512)</li>
+            <li><strong>adaptive-icon.png</strong> - Android adaptive icon (1024x1024)</li>
+            <li><strong>favicon.png</strong> - Web favicon (32x32)</li>
+            <li><strong>splash-icon.png</strong> - Splash screen icon (200x200)</li>
+        </ul>
+    </div>
+</body>
+</html>
