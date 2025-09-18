@@ -1,9 +1,11 @@
+import { useRouter } from 'expo-router';
 import React from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 
 export default function DebugScreen() {
   const { user, signOut } = useAuth();
+  const router = useRouter();
 
   const handleSignOut = async () => {
     try {
@@ -45,6 +47,20 @@ export default function DebugScreen() {
       <TouchableOpacity style={styles.button} onPress={handleSignOut}>
         <Text style={styles.buttonText}>Sign Out (Debug)</Text>
       </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={[styles.button, styles.adminButton]} 
+        onPress={() => router.push('/admin-feedback')}
+      >
+        <Text style={styles.buttonText}>Manage Feedback (Admin)</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={[styles.button, styles.testButton]} 
+        onPress={() => router.push('/test-feedback-permissions')}
+      >
+        <Text style={styles.buttonText}>Test Feedback Permissions</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -77,5 +93,11 @@ const styles = StyleSheet.create({
     color: '#25292e',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  adminButton: {
+    backgroundColor: '#007AFF',
+  },
+  testButton: {
+    backgroundColor: '#34C759',
   },
 });

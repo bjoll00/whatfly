@@ -66,3 +66,17 @@ export interface FishingConditions {
   time_of_day: 'dawn' | 'morning' | 'midday' | 'afternoon' | 'dusk' | 'night';
   time_of_year: 'winter' | 'early_spring' | 'spring' | 'late_spring' | 'early_summer' | 'summer' | 'late_summer' | 'early_fall' | 'fall' | 'late_fall';
 }
+
+export interface Feedback {
+  id: string;
+  user_id: string;
+  type: 'bug_report' | 'feature_request' | 'general_feedback' | 'improvement_suggestion';
+  title: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high';
+  status: 'pending' | 'in_review' | 'in_progress' | 'completed' | 'rejected';
+  app_version?: string;
+  device_info?: string;
+  created_at: string;
+  updated_at: string;
+}

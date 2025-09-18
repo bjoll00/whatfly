@@ -1,4 +1,4 @@
-import AntDesign from '@expo/vector-icons/AntDesign';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Redirect, Tabs } from 'expo-router';
 import React, { useState } from 'react';
@@ -130,13 +130,26 @@ export default function TabLayout() {
         ),
         }} />
         <Tabs.Screen name="whatfly/index" options={{ title: 'What Fly', tabBarIcon: ({ color, focused }) => (
-            <AntDesign name={focused ? 'question-circle' : 'question-circle'} size={24} color={color} />
+            <FontAwesome6 name={focused ? "mosquito" : "mosquito"} size={24} color={color} />
         ),
     }}/>
         <Tabs.Screen name="catchlog" options={{ title: 'Catch Log', tabBarIcon: ({ color, focused }) => (
                 <Ionicons name={focused ?'fish-sharp' : 'fish-outline'} color={color} size={24} />
             ),
         }} />
+        <Tabs.Screen 
+            name="feedback/index" 
+            options={{ 
+                title: 'Feedback',
+                tabBarIcon: ({ color, focused }) => (
+                    <Ionicons 
+                        name={focused ? 'heart' : 'heart-outline'} 
+                        color={color} 
+                        size={24} 
+                    />
+                ),
+            }} 
+        />
     </Tabs>
   );
 }

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_CONFIG } from './config';
-import { FishingLog, Fly } from './types';
+import { Feedback, FishingLog, Fly } from './types';
 
 const supabaseUrl = SUPABASE_CONFIG.url;
 const supabaseAnonKey = SUPABASE_CONFIG.anonKey;
@@ -29,6 +29,7 @@ export async function getCurrentUser() {
 export const TABLES = {
   FISHING_LOGS: 'fishing_logs',
   FLIES: 'flies',
+  FEEDBACK: 'feedback',
 } as const;
 
 // Fishing Logs Service
@@ -224,5 +225,61 @@ export const fliesService = {
 
     if (error) throw error;
     return data;
+  },
+};
+
+// Feedback Service
+export const feedbackService = {
+  // Get all feedback for a user
+  async getFeedback(userId: string): Promise<Feedback[]> {
+    const { data, error } = await supabase
+      .from(TABLES.FEEDBACK)
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Create a new feedback entry
+  async createFeedback(feedback: Omit<Feedback, 'id' | 'created_at' | 'updated_at' | 'status'>): Promise<Feedback> {
+    const newFeedback = {
+      ...feedback,
+      status: 'pending' as const,
+    };
+
+    const { data, error } = await supabase
+      .from(TABLES.FEEDBACK)
+      .insert([newFeedback])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Update feedback status (admin only)
+  async updateFeedbackStatus(id: string, status: Feedback['status']): Promise<Feedback> {
+    const { data, error } = await supabase
+      .from(TABLES.FEEDBACK)
+      .update({ status })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Delete feedback (user can only delete their own)
+  async deleteFeedback(id: string, userId: string): Promise<void> {
+    const { error } = await supabase
+      .from(TABLES.FEEDBACK)
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
   },
 };

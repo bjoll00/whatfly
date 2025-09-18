@@ -11,10 +11,9 @@ import { Fly } from '../lib/types';
 
 interface PopularFliesSectionProps {
   onFlySelect?: (fly: Fly) => void;
-  refreshTrigger?: number; // When this changes, refresh the data
 }
 
-export default function PopularFliesSection({ onFlySelect, refreshTrigger }: PopularFliesSectionProps) {
+export default function PopularFliesSection({ onFlySelect }: PopularFliesSectionProps) {
   const [popularFlies, setPopularFlies] = useState<Fly[]>([]);
   const [trendingFlies, setTrendingFlies] = useState<Fly[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -23,12 +22,6 @@ export default function PopularFliesSection({ onFlySelect, refreshTrigger }: Pop
     loadPopularFlies();
   }, []);
 
-  // Refresh when refreshTrigger changes
-  useEffect(() => {
-    if (refreshTrigger) {
-      loadPopularFlies();
-    }
-  }, [refreshTrigger]);
 
   // Refresh data when component becomes visible (for when user navigates back)
   useEffect(() => {

@@ -29,7 +29,6 @@ export default function WhatFlyScreen() {
 
   const [suggestions, setSuggestions] = useState<FlySuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const handleInputChange = (field: keyof FishingConditions, value: any) => {
     setConditions(prev => ({ ...prev, [field]: value }));
@@ -72,9 +71,6 @@ export default function WhatFlyScreen() {
     setSuggestions([]);
   };
 
-  const refreshData = () => {
-    setRefreshTrigger(prev => prev + 1);
-  };
 
 
   return (
@@ -226,12 +222,6 @@ export default function WhatFlyScreen() {
             <Text style={styles.clearButtonText}>Clear</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.button, styles.refreshButton]}
-            onPress={refreshData}
-          >
-            <Text style={styles.refreshButtonText}>Refresh</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
             style={[styles.button, styles.suggestButton, isLoading && styles.suggestButtonDisabled]}
             onPress={getSuggestions}
             disabled={isLoading}
@@ -282,7 +272,7 @@ export default function WhatFlyScreen() {
         )}
 
         {/* Popular Flies Section */}
-        <PopularFliesSection refreshTrigger={refreshTrigger} />
+        <PopularFliesSection />
 
         {suggestions.length === 0 && !isLoading && (
           <View style={styles.emptyState}>
@@ -380,25 +370,16 @@ const styles = StyleSheet.create({
   },
   clearButton: {
     backgroundColor: '#666',
-    marginRight: 5,
+    marginRight: 10,
   },
   clearButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
-  refreshButton: {
-    backgroundColor: '#007AFF',
-    marginHorizontal: 5,
-  },
-  refreshButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   suggestButton: {
     backgroundColor: '#ffd33d',
-    marginLeft: 5,
+    marginLeft: 10,
   },
   suggestButtonDisabled: {
     backgroundColor: '#666',
