@@ -71,25 +71,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { data, error };
   };
 
-  const resetPassword = async (email: string) => {
-    console.log('AuthContext: Attempting password reset for:', email);
-    
-    // Determine the redirect URL based on platform
-    let redirectTo: string;
-    if (typeof window !== 'undefined') {
-      // Web platform
-      redirectTo = `${window.location.origin}/reset-password`;
-    } else {
-      // Mobile platform - use deep link
-      redirectTo = 'whatfly://reset-password';
-    }
-    
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo,
-    });
-    console.log('AuthContext: Password reset response:', { data, error });
-    return { data, error };
-  };
+      const resetPassword = async (email: string) => {
+        console.log('AuthContext: Attempting password reset for:', email);
+        
+        // Determine the redirect URL based on platform
+        let redirectTo: string;
+        if (typeof window !== 'undefined') {
+          // Web platform - use current origin (handles any port)
+          redirectTo = `${window.location.origin}/reset-password`;
+          console.log('AuthContext: Using redirect URL:', redirectTo);
+        } else {
+          // Mobile platform - use deep link
+          redirectTo = 'whatfly://reset-password';
+          console.log('AuthContext: Using deep link:', redirectTo);
+        }
+        
+        const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo,
+          // Force manual password reset mode
+          captchaToken: undefined,
+        });
+        console.log('AuthContext: Password reset response:', { data, error });
+        return { data, error };
+      };
 
   const signOut = async () => {
     try {

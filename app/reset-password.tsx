@@ -11,15 +11,22 @@ export default function ResetPasswordScreen() {
   const { user } = useAuth();
   const { access_token, refresh_token } = useLocalSearchParams();
 
-  // If user is already authenticated, redirect to home
-  if (user) {
-    console.log('ResetPasswordScreen: User is authenticated, redirecting to home');
-    return <Redirect href="/(tabs)" />;
-  }
+  // Debug logging
+  console.log('ResetPasswordScreen: URL params:', { access_token, refresh_token });
+  console.log('ResetPasswordScreen: User state:', user);
 
-  // If no tokens are provided, redirect to auth
-  if (!access_token || !refresh_token) {
+  // If user is already authenticated but no tokens in URL, show reset form
+  // This handles the case where Supabase automatically signs the user in
+  if (user && (!access_token || !refresh_token)) {
+    console.log('ResetPasswordScreen: User is authenticated via automatic reset, showing reset form');
+    // Don't redirect - show the reset form
+  } else if (user && access_token && refresh_token) {
+    // User is authenticated and has tokens - redirect to home
+    console.log('ResetPasswordScreen: User is authenticated with tokens, redirecting to home');
+    return <Redirect href="/(tabs)" />;
+  } else if (!access_token || !refresh_token) {
     console.log('ResetPasswordScreen: No tokens provided, redirecting to auth');
+    console.log('ResetPasswordScreen: Available params:', Object.keys(useLocalSearchParams()));
     return <Redirect href="/auth" />;
   }
 
@@ -46,16 +53,28 @@ export default function ResetPasswordScreen() {
       // Import supabase directly to handle password update
       const { supabase } = await import('../lib/supabase');
       
-      // Set the session with the tokens from the URL
-      const { data, error } = await supabase.auth.setSession({
-        access_token: access_token as string,
-        refresh_token: refresh_token as string,
-      });
+      // Check if we have tokens in the URL
+      if (access_token && refresh_token) {
+        console.log('Setting session with URL tokens');
+        // Set the session with the tokens from the URL
+        const { data, error } = await supabase.auth.setSession({
+          access_token: access_token as string,
+          refresh_token: refresh_token as string,
+        });
 
-      if (error) {
-        console.error('Session error:', error);
-        Alert.alert('Session Error', 'Invalid or expired reset link. Please request a new password reset.');
-        return;
+        if (error) {
+          console.error('Session error:', error);
+          Alert.alert('Session Error', 'Invalid or expired reset link. Please request a new password reset.');
+          return;
+        }
+      } else {
+        console.log('No tokens in URL, checking current session');
+        // Check if user is already authenticated (automatic reset mode)
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          Alert.alert('No Session', 'No valid session found. Please request a new password reset.');
+          return;
+        }
       }
 
       // Update the password
@@ -74,9 +93,10 @@ export default function ResetPasswordScreen() {
           'Your password has been updated successfully. You can now sign in with your new password.',
           [
             {
-              text: 'Sign In',
-              onPress: () => {
-                // Redirect to auth screen
+              text: 'Sign Out & Sign In',
+              onPress: async () => {
+                // Sign out and redirect to auth screen
+                await supabase.auth.signOut();
                 window.location.href = '/auth';
               }
             }
@@ -98,10 +118,12 @@ export default function ResetPasswordScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>🔐 Reset Password</Text>
-          <Text style={styles.subtitle}>Enter your new password below</Text>
-        </View>
+            <View style={styles.header}>
+              <Text style={styles.title}>🔐 Reset Password</Text>
+              <Text style={styles.subtitle}>
+                {user ? 'You were automatically signed in. Enter your new password below.' : 'Enter your new password below'}
+              </Text>
+            </View>
 
         <View style={styles.form}>
           <TextInput
