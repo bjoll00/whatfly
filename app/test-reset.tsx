@@ -60,6 +60,29 @@ export default function TestResetScreen() {
     }
   };
 
+  const handleForceSignOut = () => {
+    Alert.alert(
+      'Force Sign Out',
+      'This will clear your session locally and redirect to auth page.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Force Sign Out',
+          style: 'destructive',
+          onPress: () => {
+            console.log('TestReset: Force sign out - clearing session');
+            // Clear any stored session data
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('supabase.auth.token');
+              sessionStorage.clear();
+            }
+            router.push('/auth');
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🔐 Password Reset Test</Text>
@@ -92,6 +115,10 @@ export default function TestResetScreen() {
       <View style={styles.actions}>
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
           <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.forceSignOutButton} onPress={handleForceSignOut}>
+          <Text style={styles.forceSignOutText}>Force Sign Out</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -172,6 +199,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   signOutText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  forceSignOutButton: {
+    backgroundColor: '#ff8800',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  forceSignOutText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: 'bold',

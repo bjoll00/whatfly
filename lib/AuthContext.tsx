@@ -98,17 +98,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       console.log('AuthContext: Starting sign out...');
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Sign out error:', error);
-      } else {
-        console.log('AuthContext: Sign out successful, clearing user state');
-        // Immediately clear user state and set loading to false
-        setUser(null);
-        setLoading(false);
+      
+      // Always clear user state first, regardless of Supabase response
+      console.log('AuthContext: Clearing user state immediately');
+      setUser(null);
+      setLoading(false);
+      
+      // Try to sign out from Supabase, but don't fail if it errors
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.warn('AuthContext: Supabase sign out error (ignoring):', error);
+        } else {
+          console.log('AuthContext: Supabase sign out successful');
+        }
+      } catch (supabaseError) {
+        console.warn('AuthContext: Supabase sign out failed (ignoring):', supabaseError);
       }
+      
+      console.log('AuthContext: Sign out completed - user state cleared');
     } catch (error) {
-      console.error('Sign out error:', error);
+      console.error('AuthContext: Unexpected sign out error:', error);
+      // Even if there's an error, clear the user state
+      setUser(null);
+      setLoading(false);
     }
   };
 
