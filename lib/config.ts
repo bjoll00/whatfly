@@ -34,6 +34,8 @@ export const SAMPLE_FLIES = [
     size: '14',
     color: 'Brown',
     description: 'Versatile dry fly for caddis hatches',
+    image: 'Caddis_fly.png',
+    link: 'https://www.flyfishfood.com/products/hackle-stacker-caddis-tan',
     best_conditions: {
       weather: ['sunny', 'cloudy'],
       water_clarity: ['clear', 'slightly_murky'],

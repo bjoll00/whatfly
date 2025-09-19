@@ -1,32 +1,46 @@
 {
   "expo": {
     "name": "WhatFly",
-    "slug": "WhatFly",
+    "slug": "whatfly-fishing-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/WhatFlyFishingLogo.png",
     "scheme": "whatfly",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "description": "AI-powered fly fishing companion app that helps you choose the right fly for any fishing conditions. Track your catches, get personalized fly recommendations, and improve your fishing success.",
+    "privacy": "public",
+    "keywords": ["fishing", "fly fishing", "AI", "outdoor", "sports", "nature", "trout", "catch log", "fishing guide"],
+    "category": "sports",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.whatfly.fishing",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to take photos of your catches and fishing conditions.",
+        "NSPhotoLibraryUsageDescription": "This app accesses your photo library to save and share fishing photos."
+      },
+      "appStoreUrl": "https://apps.apple.com/app/whatfly/id[TO_BE_FILLED]"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#25292e"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.whatfly.fishing",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "playStoreUrl": "https://play.google.com/store/apps/details?id=com.whatfly.fishing"
     },
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "whatfly-app"
-      }
     },
     "plugins": [
       "expo-router",
@@ -42,6 +56,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ec133e91-8db4-44a1-ad4f-348d01678740"
+      }
     }
   }
 }

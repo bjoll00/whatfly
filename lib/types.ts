@@ -28,6 +28,8 @@ export interface Fly {
   size: string;
   color: string;
   description?: string;
+  image?: string; // Path to fly image
+  link?: string; // URL to learn more about the fly
   best_conditions: {
     weather: string[];
     water_clarity: string[];

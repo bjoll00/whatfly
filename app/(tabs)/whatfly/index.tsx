@@ -1,4 +1,6 @@
 import { Picker } from '@react-native-picker/picker';
+import { Image } from 'expo-image';
+import * as WebBrowser from 'expo-web-browser';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
@@ -13,6 +15,7 @@ import {
     View,
 } from 'react-native';
 import PopularFliesSection from '../../../components/PopularFliesSection';
+import { getFlyImage, hasFlyImage } from '../../../lib/flyImages';
 import { flySuggestionService } from '../../../lib/flySuggestionService';
 import { FishingConditions, FlySuggestion } from '../../../lib/types';
 
@@ -69,6 +72,15 @@ export default function WhatFlyScreen() {
       water_temperature: undefined,
     });
     setSuggestions([]);
+  };
+
+  const handleFlyLink = async (url: string) => {
+    try {
+      await WebBrowser.openBrowserAsync(url);
+    } catch (error) {
+      console.error('Error opening link:', error);
+      Alert.alert('Error', 'Could not open the link. Please try again.');
+    }
   };
 
 
@@ -249,6 +261,17 @@ export default function WhatFlyScreen() {
                     </Text>
                   </View>
                 </View>
+                
+                {hasFlyImage(suggestion.fly.name) && (
+                  <View style={styles.flyImageContainer}>
+                    <Image 
+                      source={getFlyImage(suggestion.fly.name)} 
+                      style={styles.flyImage}
+                      contentFit="contain"
+                    />
+                  </View>
+                )}
+                
                 <Text style={styles.flyType}>
                   {suggestion.fly.type.toUpperCase()} • Size {suggestion.fly.size} • {suggestion.fly.color}
                 </Text>
@@ -266,6 +289,16 @@ export default function WhatFlyScreen() {
                     Uses: {suggestion.fly.total_uses}
                   </Text>
                 </View>
+                {suggestion.fly.link && (
+                  <TouchableOpacity 
+                    style={styles.learnMoreButton}
+                    onPress={() => handleFlyLink(suggestion.fly.link!)}
+                  >
+                    <Text style={styles.learnMoreText}>
+                      🔗 Learn More & Purchase
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </View>
@@ -411,13 +444,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   flyName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
     flex: 1,
+  },
+  flyImageContainer: {
+    alignItems: 'center',
+    marginVertical: 15,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 15,
+  },
+  flyImage: {
+    width: 150,
+    height: 150,
+    borderRadius: 8,
   },
   confidenceBadge: {
     backgroundColor: '#4CAF50',
@@ -453,6 +498,19 @@ const styles = StyleSheet.create({
   statText: {
     fontSize: 12,
     color: '#999',
+  },
+  learnMoreButton: {
+    backgroundColor: '#ffd33d',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  learnMoreText: {
+    color: '#25292e',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   emptyState: {
     marginTop: 40,
