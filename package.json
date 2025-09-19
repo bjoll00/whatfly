@@ -26,6 +26,7 @@
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.1.6",
+    "@rnmapbox/maps": "^10.1.44",
     "@supabase/supabase-js": "^2.57.2",
     "expo": "~54.0.0",
     "expo-blur": "~15.0.7",
@@ -40,6 +41,7 @@
     "expo-symbols": "~1.0.7",
     "expo-system-ui": "~6.0.7",
     "expo-web-browser": "~15.0.7",
+    "mapbox-gl": "^2.15.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.4",
@@ -55,9 +57,11 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.1.10",
+    "css-loader": "^7.1.2",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "sharp": "^0.34.3",
+    "style-loader": "^4.0.0",
     "typescript": "~5.9.2"
   },
   "private": true

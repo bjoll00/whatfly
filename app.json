@@ -40,7 +40,12 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "build": {
+        "babel": {
+          "include": ["@rnmapbox/maps"]
+        }
+      }
     },
     "plugins": [
       "expo-router",
@@ -51,6 +56,13 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsImpl": "mapbox",
+          "RNMapboxMapsDownloadToken": "pk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWZyNmQ1NDQwNjZvMm1vaTRxeG5nenZsIn0.X3taJgWOAVZPr0kTzxn2Vg"
         }
       ]
     ],

@@ -133,6 +133,10 @@ export default function TabLayout() {
             <FontAwesome6 name={focused ? "mosquito" : "mosquito"} size={24} color={color} />
         ),
     }}/>
+        <Tabs.Screen name="map" options={{ title: 'Map', tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'map' : 'map-outline'} color={color} size={24} />
+        ),
+    }} />
         <Tabs.Screen name="catchlog" options={{ title: 'Catch Log', tabBarIcon: ({ color, focused }) => (
                 <Ionicons name={focused ?'fish-sharp' : 'fish-outline'} color={color} size={24} />
             ),

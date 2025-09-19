@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Linking,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -117,6 +118,16 @@ export default function FeedbackScreen() {
           <Text style={styles.subtitle}>
             Help us improve WhatFly by sharing your thoughts and ideas
           </Text>
+          
+          <TouchableOpacity
+            style={styles.emailButton}
+            onPress={() => {
+              Linking.openURL('mailto:whatflyfishing@gmail.com?subject=WhatFly Feedback&body=Hi WhatFly Team,');
+            }}
+          >
+            <Ionicons name="mail" size={16} color="#ffd33d" />
+            <Text style={styles.emailButtonText}>Email us directly at whatflyfishing@gmail.com</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
@@ -332,5 +343,23 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#fff',
     fontWeight: '600',
+  },
+  emailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#555',
+    marginTop: 16,
+  },
+  emailButtonText: {
+    color: '#ffd33d',
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
   },
 });
