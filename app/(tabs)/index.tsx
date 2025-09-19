@@ -54,10 +54,6 @@ export default function Index() {
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
-
-        <Link href='/test-reset' style={styles.testLink}>
-          <Text style={styles.testLinkText}>🔧 Test Password Reset</Text>
-        </Link>
       </View>
     </View>
   );
@@ -107,20 +103,6 @@ const styles = StyleSheet.create({
   signOutText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  testLink: {
-    backgroundColor: '#666',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  testLinkText: {
-    color: '#ffffff',
-    fontSize: 14,
     fontWeight: 'bold',
     textAlign: 'center',
   }
