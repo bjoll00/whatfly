@@ -127,6 +127,13 @@ export default function TestResetScreen() {
         >
           <Text style={styles.linkText}>Go to Reset Password Page</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.debugButton}
+          onPress={() => router.push('/email-debug')}
+        >
+          <Text style={styles.debugButtonText}>🔧 Email Debug Tool</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.info}>
@@ -224,6 +231,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  debugButton: {
+    backgroundColor: '#ff8800',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  debugButtonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: 'bold',
