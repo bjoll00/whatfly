@@ -77,9 +77,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Determine the redirect URL based on platform
         let redirectTo: string;
         if (typeof window !== 'undefined') {
-          // Web platform - use current origin (handles any port)
-          redirectTo = `${window.location.origin}/reset-password`;
-          console.log('AuthContext: Using redirect URL:', redirectTo);
+          // Check if we're in development (localhost) or production
+          const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          if (isDevelopment) {
+            // Development - use current origin (handles any port)
+            redirectTo = `${window.location.origin}/reset-password`;
+            console.log('AuthContext: Development mode - using redirect URL:', redirectTo);
+          } else {
+            // Production - use your production domain
+            redirectTo = 'https://whatfly.app/reset-password';
+            console.log('AuthContext: Production mode - using redirect URL:', redirectTo);
+          }
         } else {
           // Mobile platform - use deep link
           redirectTo = 'whatfly://reset-password';
