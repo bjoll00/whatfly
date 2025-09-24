@@ -19,13 +19,9 @@ export default function Index() {
     );
   }
 
-  if (user) {
-    console.log('Index: User authenticated, redirecting to tabs');
-    return <Redirect href="/(tabs)" />;
-  }
-
-  console.log('Index: No user, redirecting to auth');
-  return <Redirect href="/auth" />;
+  // Always redirect to tabs - let the tab layout handle guest vs authenticated users
+  console.log('Index: Redirecting to main app');
+  return <Redirect href="/(tabs)" />;
 }
 
 const styles = StyleSheet.create({

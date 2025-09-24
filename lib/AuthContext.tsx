@@ -9,6 +9,7 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<{ error: any }>;
   resetPassword: (email: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ error: any }>;
   refreshAuth: () => Promise<void>;
 }
 
@@ -133,6 +134,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteAccount = async () => {
+    console.log('AuthContext: Starting account deletion...');
+    
+    try {
+      // Get current user and session
+      const { data: { user: currentUser, session }, error: userError } = await supabase.auth.getSession();
+      
+      if (userError || !currentUser || !session) {
+        console.error('AuthContext: No authenticated user or session found for deletion');
+        return { error: { message: 'No authenticated user found' } };
+      }
+
+      console.log('AuthContext: Deleting account for user:', currentUser.email);
+      
+      // Call the Supabase Edge Function to delete the account
+      const { data, error } = await supabase.functions.invoke('delete-account', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) {
+        console.error('AuthContext: Edge function error:', error);
+        return { error: { message: `Failed to delete account: ${error.message}` } };
+      }
+
+      if (!data.success) {
+        console.error('AuthContext: Account deletion failed:', data.error);
+        return { error: { message: data.error || 'Account deletion failed' } };
+      }
+
+      console.log('AuthContext: Account deleted successfully from server');
+      
+      // Clear local state
+      setUser(null);
+      setLoading(false);
+      
+      console.log('AuthContext: Account deletion completed successfully');
+      
+      return { error: null };
+    } catch (error) {
+      console.error('AuthContext: Unexpected account deletion error:', error);
+      return { error: { message: 'An unexpected error occurred during account deletion' } };
+    }
+  };
+
   const refreshAuth = async () => {
     console.log('AuthContext: Refreshing auth state...');
     setLoading(true);
@@ -154,6 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     resetPassword,
     signOut,
+    deleteAccount,
     refreshAuth,
   };
 

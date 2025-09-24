@@ -1,4 +1,4 @@
-import { Redirect } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
     Alert,
@@ -26,10 +26,26 @@ export default function AuthScreen() {
   const [showVerificationMessage, setShowVerificationMessage] = useState(false);
   const { user, signIn, signUp, resetPassword, refreshAuth } = useAuth();
 
-  // If user is already authenticated, redirect to home
+  // If user is already authenticated, show a success message instead of redirecting
   if (user) {
-    console.log('AuthScreen: User is authenticated, redirecting to home');
-    return <Redirect href="/(tabs)" />;
+    console.log('AuthScreen: User is already authenticated');
+    return (
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.title}>✅ Already Signed In</Text>
+          <Text style={styles.message}>You're already signed in as {user.email}</Text>
+          <TouchableOpacity 
+            style={styles.button}
+            onPress={() => {
+              // Navigate back to main app
+              router.back();
+            }}
+          >
+            <Text style={styles.buttonText}>Continue to App</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   }
 
   const handleAuth = async () => {
@@ -333,5 +349,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#ffd33d',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  message: {
+    fontSize: 16,
+    color: '#ffffff',
+    textAlign: 'center',
+    marginBottom: 30,
+  },
+  button: {
+    backgroundColor: '#ffd33d',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: '#1a1d21',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

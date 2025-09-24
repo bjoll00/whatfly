@@ -1,27 +1,48 @@
 import { Image } from 'expo-image';
-import { Link } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useAuth } from '../../../lib/AuthContext';
 
 const NewLogImage = require('@/assets/images/mountain_lake.jpg');
 const HistoryImage = require('@/assets/images/brady_tent.jpg');
 
 export default function CatchLogScreen() {
+  const { user } = useAuth();
+
+  const handleNewLogPress = () => {
+    if (user) {
+      router.push('/catchlog/newlog');
+    } else {
+      router.push('/auth');
+    }
+  };
+
+  const handleHistoryPress = () => {
+    if (user) {
+      router.push('/catchlog/history');
+    } else {
+      router.push('/auth');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.imageContainer}>
-        <Link href="/catchlog/newlog">
+        <TouchableOpacity onPress={handleNewLogPress}>
           <View style={styles.buttonContainer}>
             <Image source={NewLogImage} style={styles.image} />
             <Text style={styles.buttonLabel}>New Log</Text>
+            {!user && <Text style={styles.signInPrompt}>Sign in to save logs</Text>}
           </View>
-        </Link>
+        </TouchableOpacity>
 
-        <Link href="/catchlog/history">
+        <TouchableOpacity onPress={handleHistoryPress}>
           <View style={styles.buttonContainer}>
             <Image source={HistoryImage} style={styles.image} />
             <Text style={styles.buttonLabel}>History</Text>
+            {!user && <Text style={styles.signInPrompt}>Sign in to view history</Text>}
           </View>
-        </Link>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -60,5 +81,12 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     borderRadius: 15,
-  }
+  },
+  signInPrompt: {
+    color: '#ffd33d',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 5,
+    fontStyle: 'italic',
+  },
 });

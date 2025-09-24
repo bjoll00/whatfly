@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     Alert,
@@ -8,10 +9,12 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useAuth } from '../../../lib/AuthContext';
 import { fishingLogsService, getCurrentUserId } from '../../../lib/supabase';
 import { FishingLog } from '../../../lib/types';
 
 export default function HistoryScreen() {
+  const { user } = useAuth();
   const [logs, setLogs] = useState<FishingLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -19,6 +22,11 @@ export default function HistoryScreen() {
 
   const loadLogs = async () => {
     try {
+      if (!user) {
+        setLogs([]);
+        return;
+      }
+
       const userId = await getCurrentUserId();
       
       if (!userId) {
@@ -192,10 +200,27 @@ export default function HistoryScreen() {
   if (logs.length === 0) {
     return (
       <View style={styles.container}>
-        <Text style={styles.emptyText}>No fishing logs yet</Text>
-        <Text style={styles.emptySubtext}>
-          Start logging your fishing trips to build your personal database!
-        </Text>
+        {!user ? (
+          <>
+            <Text style={styles.emptyText}>Sign In to View History</Text>
+            <Text style={styles.emptySubtext}>
+              Your fishing logs are saved when you're signed in. Sign in to view your catch history!
+            </Text>
+            <TouchableOpacity 
+              style={styles.signInButton}
+              onPress={() => router.push('/auth')}
+            >
+              <Text style={styles.signInButtonText}>Sign In</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.emptyText}>No fishing logs yet</Text>
+            <Text style={styles.emptySubtext}>
+              Start logging your fishing trips to build your personal database!
+            </Text>
+          </>
+        )}
       </View>
     );
   }
@@ -391,5 +416,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 10,
     paddingHorizontal: 40,
+  },
+  signInButton: {
+    backgroundColor: '#ffd33d',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  signInButtonText: {
+    color: '#1a1d21',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });

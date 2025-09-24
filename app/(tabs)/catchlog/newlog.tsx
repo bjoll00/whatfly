@@ -1,4 +1,5 @@
 import { Picker } from '@react-native-picker/picker';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
     Alert,
@@ -12,11 +13,13 @@ import {
     View,
 } from 'react-native';
 import FlySelector from '../../../components/FlySelector';
+import { useAuth } from '../../../lib/AuthContext';
 import { flySuggestionService } from '../../../lib/flySuggestionService';
 import { fishingLogsService, getCurrentUserId } from '../../../lib/supabase';
 import { FishingLog, Fly } from '../../../lib/types';
 
 export default function NewLogScreen() {
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<Partial<FishingLog>>({
     location: '',
@@ -66,6 +69,18 @@ export default function NewLogScreen() {
   const handleSubmit = async () => {
     if (!formData.location) {
       Alert.alert('Missing Information', 'Please enter a location.');
+      return;
+    }
+
+    if (!user) {
+      Alert.alert(
+        'Sign In Required',
+        'You need to sign in to save your fishing logs. Would you like to sign in now?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => router.push('/auth') }
+        ]
+      );
       return;
     }
 

@@ -1,6 +1,6 @@
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Redirect, Tabs } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Image, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../lib/AuthContext';
@@ -12,11 +12,8 @@ export default function TabLayout() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
-  // If user is not authenticated, redirect to auth
-  if (!user) {
-    console.log('TabLayout: No user, redirecting to auth');
-    return <Redirect href="/auth" />;
-  }
+  // Allow guest access - users can use basic features without login
+  // Only redirect to auth for account-specific features
 
   const handleSignOut = () => {
     console.log('TabLayout: Sign out button pressed');
@@ -87,23 +84,41 @@ export default function TabLayout() {
   );
 
   const HeaderRight = () => (
-    <TouchableOpacity 
-      onPress={() => {
-        console.log('TabLayout: TouchableOpacity pressed');
-        handleDirectSignOut();
-      }} 
-      style={{ 
-        marginRight: 15,
-        opacity: isSigningOut ? 0.5 : 1 
-      }}
-      disabled={isSigningOut}
-    >
-      <Ionicons 
-        name={isSigningOut ? "hourglass-outline" : "log-out-outline"} 
-        size={24} 
-        color="#ffd33d" 
-      />
-    </TouchableOpacity>
+    <View style={{ marginRight: 15 }}>
+      {user ? (
+        // Authenticated user - show sign out button
+        <TouchableOpacity 
+          onPress={() => {
+            console.log('TabLayout: TouchableOpacity pressed');
+            handleDirectSignOut();
+          }} 
+          style={{ 
+            opacity: isSigningOut ? 0.5 : 1 
+          }}
+          disabled={isSigningOut}
+        >
+          <Ionicons 
+            name={isSigningOut ? "hourglass-outline" : "log-out-outline"} 
+            size={24} 
+            color="#ffd33d" 
+          />
+        </TouchableOpacity>
+      ) : (
+        // Guest user - show sign in button
+        <TouchableOpacity 
+          onPress={() => {
+            console.log('TabLayout: Navigate to auth');
+            router.push('/auth');
+          }} 
+        >
+          <Ionicons 
+            name="log-in-outline" 
+            size={24} 
+            color="#ffd33d" 
+          />
+        </TouchableOpacity>
+      )}
+    </View>
   );
 
   return (
@@ -149,6 +164,19 @@ export default function TabLayout() {
                     <Ionicons 
                         name={focused ? 'heart' : 'heart-outline'} 
                         color={color} 
+                        size={24} 
+                    />
+                ),
+            }} 
+        />
+        <Tabs.Screen 
+            name="settings" 
+            options={{ 
+                title: 'Settings',
+                tabBarIcon: ({ color, focused }) => (
+                    <Ionicons 
+                        name={focused ? 'settings' : 'settings-outline'} 
+                        color={user ? color : '#666'} 
                         size={24} 
                     />
                 ),
