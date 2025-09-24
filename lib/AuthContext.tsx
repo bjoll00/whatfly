@@ -138,16 +138,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('AuthContext: Starting account deletion...');
     
     try {
-      // Get current user and session
-      const { data: { user: currentUser, session }, error: userError } = await supabase.auth.getSession();
-      
-      if (userError || !currentUser || !session) {
-        console.error('AuthContext: No authenticated user or session found for deletion');
+      // Use the current user from context
+      if (!user) {
+        console.error('AuthContext: No authenticated user found for deletion');
         return { error: { message: 'No authenticated user found' } };
       }
 
-      console.log('AuthContext: Deleting account for user:', currentUser.email);
+      console.log('AuthContext: Deleting account for user:', user.email);
       
+      // Get the current session to get the access token
+      console.log('AuthContext: Getting session for deletion...');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      console.log('AuthContext: Session result:', { session: !!session, error: sessionError });
+      
+      if (sessionError || !session) {
+        console.error('AuthContext: No valid session found for deletion', { sessionError, session });
+        return { error: { message: 'No valid session found' } };
+      }
+
+      console.log('AuthContext: Session access token available:', !!session.access_token);
+
       // Call the Supabase Edge Function to delete the account
       const { data, error } = await supabase.functions.invoke('delete-account', {
         headers: {
@@ -215,3 +226,4 @@ export function useAuth() {
   }
   return context;
 }
+
