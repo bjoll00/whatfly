@@ -13,14 +13,17 @@ import {
     View,
 } from 'react-native';
 import FlySelector from '../../../components/FlySelector';
+import PremiumUpgradeModal from '../../../components/PremiumUpgradeModal';
 import { useAuth } from '../../../lib/AuthContext';
 import { flySuggestionService } from '../../../lib/flySuggestionService';
 import { fishingLogsService, getCurrentUserId } from '../../../lib/supabase';
 import { FishingLog, Fly } from '../../../lib/types';
+import { UsageService } from '../../../lib/usageService';
 
 export default function NewLogScreen() {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [formData, setFormData] = useState<Partial<FishingLog>>({
     location: '',
     weather_conditions: 'sunny',
@@ -91,6 +94,20 @@ export default function NewLogScreen() {
         Alert.alert('Auth error', 'Please sign in to save fishing logs.');
         return;
       }
+
+      // Check usage limits for catch logs
+      const usageCheck = await UsageService.canPerformAction(userId, 'catch_logs');
+      if (!usageCheck.canPerform) {
+        Alert.alert(
+          'Usage Limit Reached',
+          `You've reached the limit of ${usageCheck.limit} catch logs for free users. Upgrade to Premium for unlimited logging!`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => setShowUpgradeModal(true) }
+          ]
+        );
+        return;
+      }
       const newLog: Omit<FishingLog, 'id' | 'created_at' | 'updated_at'> = {
         user_id: userId,
         date: new Date().toISOString().split('T')[0],
@@ -131,6 +148,9 @@ export default function NewLogScreen() {
         console.error('Error learning from results:', error);
         // Don't show error to user as the log was saved successfully
       }
+      
+      // Increment usage count for catch logs
+      await UsageService.incrementUsage(userId, 'catch_logs');
       
       Alert.alert('Success', 'Fishing log saved successfully!');
       
@@ -360,6 +380,18 @@ export default function NewLogScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Premium Upgrade Modal */}
+      <PremiumUpgradeModal
+        visible={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        onUpgrade={(planId) => {
+          // TODO: Implement subscription upgrade
+          console.log('Upgrade to plan:', planId);
+          setShowUpgradeModal(false);
+        }}
+        feature="unlimited_catch_logs"
+      />
     </KeyboardAvoidingView>
   );
 }

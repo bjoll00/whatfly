@@ -15,11 +15,14 @@ import {
     View,
 } from 'react-native';
 import PopularFliesSection from '../../../components/PopularFliesSection';
+import PremiumUpgradeModal from '../../../components/PremiumUpgradeModal';
 import { getFlyImage, hasFlyImage } from '../../../lib/flyImages';
 import { flySuggestionService } from '../../../lib/flySuggestionService';
 import { FishingConditions, FlySuggestion } from '../../../lib/types';
+import { useAuth } from '../../../lib/AuthContext';
 
 export default function WhatFlyScreen() {
+  const { user } = useAuth();
   const [conditions, setConditions] = useState<Partial<FishingConditions>>({
     location: '',
     weather_conditions: 'sunny',
@@ -32,6 +35,8 @@ export default function WhatFlyScreen() {
 
   const [suggestions, setSuggestions] = useState<FlySuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [usageInfo, setUsageInfo] = useState<any>(null);
 
   const handleInputChange = (field: keyof FishingConditions, value: any) => {
     setConditions(prev => ({ ...prev, [field]: value }));
@@ -46,11 +51,24 @@ export default function WhatFlyScreen() {
     setIsLoading(true);
     try {
       console.log('Getting suggestions for conditions:', conditions);
-      const flySuggestions = await flySuggestionService.getSuggestions(conditions as FishingConditions);
-      console.log('Received suggestions:', flySuggestions);
-      setSuggestions(flySuggestions);
+      const result = await flySuggestionService.getSuggestions(
+        conditions as FishingConditions,
+        user?.id
+      );
       
-      if (flySuggestions.length === 0) {
+      console.log('Received suggestions result:', result);
+      
+      if (!result.canPerform) {
+        // User hit usage limit
+        setUsageInfo(result.usageInfo);
+        setShowUpgradeModal(true);
+        return;
+      }
+      
+      setSuggestions(result.suggestions);
+      setUsageInfo(result.usageInfo);
+      
+      if (result.suggestions.length === 0) {
         Alert.alert('No Suggestions', 'No fly suggestions found. The database might be empty or there might be a connection issue.');
       }
     } catch (error) {
@@ -314,7 +332,39 @@ export default function WhatFlyScreen() {
             </Text>
           </View>
         )}
+
+        {/* Usage Info Display */}
+        {usageInfo && user && (
+          <View style={styles.usageInfo}>
+            <Text style={styles.usageText}>
+              {usageInfo.usage.isPremium 
+                ? '🌟 Premium - Unlimited suggestions'
+                : `📊 ${usageInfo.usage.flySuggestionsUsed}/${usageInfo.limit} suggestions used today`
+              }
+            </Text>
+            {!usageInfo.usage.isPremium && (
+              <TouchableOpacity 
+                style={styles.upgradeButton}
+                onPress={() => setShowUpgradeModal(true)}
+              >
+                <Text style={styles.upgradeButtonText}>Upgrade for Unlimited</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </ScrollView>
+
+      {/* Premium Upgrade Modal */}
+      <PremiumUpgradeModal
+        visible={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        onUpgrade={(planId) => {
+          // TODO: Implement subscription upgrade
+          console.log('Upgrade to plan:', planId);
+          setShowUpgradeModal(false);
+        }}
+        feature="unlimited_fly_suggestions"
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -521,5 +571,29 @@ const styles = StyleSheet.create({
     color: '#ccc',
     textAlign: 'center',
     lineHeight: 24,
+  },
+  usageInfo: {
+    backgroundColor: '#1a1d21',
+    borderRadius: 8,
+    padding: 16,
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  usageText: {
+    color: '#ffffff',
+    fontSize: 14,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  upgradeButton: {
+    backgroundColor: '#ffd33d',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  upgradeButtonText: {
+    color: '#1a1d21',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

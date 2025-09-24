@@ -1,17 +1,44 @@
 import { fliesService } from './supabase';
 import { Fly, FlySuggestion } from './types';
+import { UsageService } from './usageService';
 
 export class FlySuggestionService {
   // Get fly suggestions based on fishing conditions
-  async getSuggestions(conditions: {
-    weather_conditions: string;
-    water_clarity: string;
-    water_level: string;
-    time_of_day: string;
-    water_temperature?: number;
-  }): Promise<FlySuggestion[]> {
+  async getSuggestions(
+    conditions: {
+      weather_conditions: string;
+      water_clarity: string;
+      water_level: string;
+      time_of_day: string;
+      water_temperature?: number;
+    },
+    userId?: string
+  ): Promise<{ suggestions: FlySuggestion[]; usageInfo?: any; canPerform: boolean }> {
     try {
       console.log('Getting suggestions for conditions:', conditions);
+      
+      // Check usage limits if user is provided
+      let usageInfo: any = null;
+      let canPerform = true;
+      
+      if (userId) {
+        const usageCheck = await UsageService.canPerformAction(userId, 'fly_suggestions');
+        canPerform = usageCheck.canPerform;
+        usageInfo = {
+          usage: usageCheck.usage,
+          limit: usageCheck.limit,
+          canPerform: usageCheck.canPerform
+        };
+        
+        if (!canPerform) {
+          console.log('Usage limit exceeded for user:', userId);
+          return {
+            suggestions: [],
+            usageInfo,
+            canPerform: false
+          };
+        }
+      }
       
       // Get all flies first (since we have sample data)
       const flies = await fliesService.getFlies();
@@ -19,23 +46,44 @@ export class FlySuggestionService {
 
       if (flies.length === 0) {
         console.log('No flies found in database');
-        return [];
+        return {
+          suggestions: [],
+          usageInfo,
+          canPerform: true
+        };
       }
 
       // Score and rank flies
       const suggestions = flies.map(fly => this.scoreFly(fly, conditions));
       console.log('Generated suggestions:', suggestions.length);
       
-      // Sort by confidence (highest first) and return top 5
+      // Limit suggestions for free users
+      const maxSuggestions = userId && !usageInfo?.usage?.isPremium ? 3 : 5;
+      
+      // Sort by confidence (highest first) and return top suggestions
       const sortedSuggestions = suggestions
         .sort((a, b) => b.confidence - a.confidence)
-        .slice(0, 5);
+        .slice(0, maxSuggestions);
       
       console.log('Final suggestions:', sortedSuggestions);
-      return sortedSuggestions;
+      
+      // Increment usage if user is provided
+      if (userId && canPerform) {
+        await UsageService.incrementUsage(userId, 'fly_suggestions');
+      }
+      
+      return {
+        suggestions: sortedSuggestions,
+        usageInfo,
+        canPerform: true
+      };
     } catch (error) {
       console.error('Error getting fly suggestions:', error);
-      return [];
+      return {
+        suggestions: [],
+        usageInfo: null,
+        canPerform: false
+      };
     }
   }
 
