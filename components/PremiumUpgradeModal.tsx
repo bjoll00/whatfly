@@ -4,13 +4,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { useAuth } from '../lib/AuthContext';
+import { StripeService } from '../lib/stripeService';
 
 interface PremiumUpgradeModalProps {
   visible: boolean;
@@ -27,7 +30,9 @@ export default function PremiumUpgradeModal({
   currentPlan,
   feature
 }: PremiumUpgradeModalProps) {
+  const { user } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState('pro');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const plans = [
     {
@@ -91,6 +96,40 @@ export default function PremiumUpgradeModal({
     }
   };
 
+  const handleUpgrade = async () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to upgrade to premium.');
+      return;
+    }
+
+    setIsProcessing(true);
+    
+    try {
+      const { success, error } = await StripeService.createSubscription(user.id, selectedPlan);
+      
+      if (success) {
+        // The user will be redirected to Stripe Checkout
+        // The webhook will handle updating their premium status
+        onUpgrade(selectedPlan);
+      } else {
+        Alert.alert(
+          'Upgrade Failed',
+          error || 'Failed to start upgrade process. Please try again.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Upgrade error:', error);
+      Alert.alert(
+        'Error',
+        'An unexpected error occurred. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <Modal
       visible={visible}
@@ -151,11 +190,22 @@ export default function PremiumUpgradeModal({
 
           <View style={styles.footer}>
             <TouchableOpacity
-              style={[styles.upgradeButton, selectedPlan && styles.upgradeButtonActive]}
-              onPress={() => onUpgrade(selectedPlan)}
+              style={[
+                styles.upgradeButton, 
+                selectedPlan && styles.upgradeButtonActive,
+                isProcessing && styles.disabledButton
+              ]}
+              onPress={handleUpgrade}
+              disabled={isProcessing}
             >
-              <Text style={styles.upgradeButtonText}>
-                Upgrade to {plans.find(p => p.id === selectedPlan)?.name}
+              <Text style={[
+                styles.upgradeButtonText,
+                isProcessing && styles.disabledButtonText
+              ]}>
+                {isProcessing 
+                  ? 'Processing...' 
+                  : `Upgrade to ${plans.find(p => p.id === selectedPlan)?.name}`
+                }
               </Text>
             </TouchableOpacity>
             
