@@ -1,6 +1,7 @@
 import { fliesService } from './supabase';
 import { Fly, FlySuggestion } from './types';
 import { UsageService } from './usageService';
+import { APP_CONFIG } from './appConfig';
 
 export class FlySuggestionService {
   // Get fly suggestions based on fishing conditions
@@ -17,11 +18,11 @@ export class FlySuggestionService {
     try {
       console.log('Getting suggestions for conditions:', conditions);
       
-      // Check usage limits if user is provided
+      // Check usage limits if user is provided and limits are enabled
       let usageInfo: any = null;
       let canPerform = true;
       
-      if (userId) {
+      if (userId && APP_CONFIG.ENABLE_USAGE_LIMITS) {
         const usageCheck = await UsageService.canPerformAction(userId, 'fly_suggestions');
         canPerform = usageCheck.canPerform;
         usageInfo = {
@@ -67,8 +68,8 @@ export class FlySuggestionService {
       
       console.log('Final suggestions:', sortedSuggestions);
       
-      // Increment usage if user is provided
-      if (userId && canPerform) {
+      // Increment usage if user is provided and limits are enabled
+      if (userId && canPerform && APP_CONFIG.ENABLE_USAGE_LIMITS) {
         await UsageService.incrementUsage(userId, 'fly_suggestions');
       }
       

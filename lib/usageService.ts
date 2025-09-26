@@ -3,6 +3,7 @@
 
 import { supabase } from './supabase';
 import { useAuth } from './AuthContext';
+import { APP_CONFIG } from './appConfig';
 
 export interface UsageLimit {
   type: 'fly_suggestions' | 'catch_logs';
@@ -75,6 +76,15 @@ export class UsageService {
     actionType: 'fly_suggestions' | 'catch_logs'
   ): Promise<{ canPerform: boolean; usage: UserUsage; limit: number }> {
     const usage = await this.getUserUsage(userId);
+    
+    // If usage limits are disabled (App Store mode), always allow
+    if (!APP_CONFIG.ENABLE_USAGE_LIMITS) {
+      return {
+        canPerform: true,
+        usage,
+        limit: -1 // -1 indicates unlimited
+      };
+    }
     
     // Premium users have unlimited access
     if (usage.isPremium) {

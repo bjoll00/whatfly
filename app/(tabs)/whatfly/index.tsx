@@ -20,6 +20,7 @@ import { getFlyImage, hasFlyImage } from '../../../lib/flyImages';
 import { flySuggestionService } from '../../../lib/flySuggestionService';
 import { FishingConditions, FlySuggestion } from '../../../lib/types';
 import { useAuth } from '../../../lib/AuthContext';
+import { APP_CONFIG } from '../../../lib/appConfig';
 
 export default function WhatFlyScreen() {
   const { user } = useAuth();
@@ -58,7 +59,7 @@ export default function WhatFlyScreen() {
       
       console.log('Received suggestions result:', result);
       
-      if (!result.canPerform) {
+      if (!result.canPerform && APP_CONFIG.ENABLE_USAGE_LIMITS) {
         // User hit usage limit
         setUsageInfo(result.usageInfo);
         setShowUpgradeModal(true);

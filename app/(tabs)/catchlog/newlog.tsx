@@ -19,6 +19,7 @@ import { flySuggestionService } from '../../../lib/flySuggestionService';
 import { fishingLogsService, getCurrentUserId } from '../../../lib/supabase';
 import { FishingLog, Fly } from '../../../lib/types';
 import { UsageService } from '../../../lib/usageService';
+import { APP_CONFIG } from '../../../lib/appConfig';
 
 export default function NewLogScreen() {
   const { user } = useAuth();
@@ -95,18 +96,20 @@ export default function NewLogScreen() {
         return;
       }
 
-      // Check usage limits for catch logs
-      const usageCheck = await UsageService.canPerformAction(userId, 'catch_logs');
-      if (!usageCheck.canPerform) {
-        Alert.alert(
-          'Usage Limit Reached',
-          `You've reached the limit of ${usageCheck.limit} catch logs for free users. Upgrade to Premium for unlimited logging!`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Upgrade', onPress: () => setShowUpgradeModal(true) }
-          ]
-        );
-        return;
+      // Check usage limits for catch logs (only if limits are enabled)
+      if (APP_CONFIG.ENABLE_USAGE_LIMITS) {
+        const usageCheck = await UsageService.canPerformAction(userId, 'catch_logs');
+        if (!usageCheck.canPerform) {
+          Alert.alert(
+            'Usage Limit Reached',
+            `You've reached the limit of ${usageCheck.limit} catch logs for free users. Upgrade to Premium for unlimited logging!`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Upgrade', onPress: () => setShowUpgradeModal(true) }
+            ]
+          );
+          return;
+        }
       }
       const newLog: Omit<FishingLog, 'id' | 'created_at' | 'updated_at'> = {
         user_id: userId,
@@ -149,8 +152,10 @@ export default function NewLogScreen() {
         // Don't show error to user as the log was saved successfully
       }
       
-      // Increment usage count for catch logs
-      await UsageService.incrementUsage(userId, 'catch_logs');
+      // Increment usage count for catch logs (only if limits are enabled)
+      if (APP_CONFIG.ENABLE_USAGE_LIMITS) {
+        await UsageService.incrementUsage(userId, 'catch_logs');
+      }
       
       Alert.alert('Success', 'Fishing log saved successfully!');
       
