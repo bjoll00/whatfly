@@ -18,7 +18,8 @@
       "buildNumber": "1.0.0",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to take photos of your catches and fishing conditions.",
-        "NSPhotoLibraryUsageDescription": "This app accesses your photo library to save and share fishing photos."
+        "NSPhotoLibraryUsageDescription": "This app accesses your photo library to save and share fishing photos.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "appStoreUrl": "https://apps.apple.com/app/whatfly/id[TO_BE_FILLED]"
     },
@@ -62,7 +63,7 @@
         "@rnmapbox/maps",
         {
           "RNMapboxMapsImpl": "mapbox",
-          "RNMapboxMapsDownloadToken": "pk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWZyNmQ1NDQwNjZvMm1vaTRxeG5nenZsIn0.X3taJgWOAVZPr0kTzxn2Vg"
+          "RNMapboxMapsDownloadToken": "sk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWcwNWdlemswYWg4MmtwdGJxNWk0bDQzIn0.jJAUJn5dLT4dnLClfaqeZA"
         }
       ]
     ],
