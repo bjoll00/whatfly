@@ -23,7 +23,11 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {"ios": {
+        "appleId": "corbinbrandonwilliams@gmail.com",
+        "ascAppId": "6752791469",
+        "appleTeameId": "KB56ZR7SSU"
+      }}
   }
 }
 
