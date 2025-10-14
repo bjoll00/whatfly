@@ -10,15 +10,27 @@
     "newArchEnabled": true,
     "description": "AI-powered fly fishing companion app that helps you choose the right fly for any fishing conditions. Track your catches, get personalized fly recommendations, and improve your fishing success.",
     "privacy": "public",
-    "keywords": ["fishing", "fly fishing", "AI", "outdoor", "sports", "nature", "trout", "catch log", "fishing guide"],
+    "keywords": [
+      "fishing",
+      "fly fishing",
+      "AI",
+      "outdoor",
+      "sports",
+      "nature",
+      "trout",
+      "catch log",
+      "fishing guide"
+    ],
     "category": "sports",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.whatfly.fishing",
-      "buildNumber": "1.0.0",
+      "buildNumber": "1.0.1",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to take photos of your catches and fishing conditions.",
         "NSPhotoLibraryUsageDescription": "This app accesses your photo library to save and share fishing photos.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to show nearby fishing spots and provide location-based recommendations.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location to show nearby fishing spots and provide location-based recommendations.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "appStoreUrl": "https://apps.apple.com/app/whatfly/id[TO_BE_FILLED]"
@@ -32,6 +44,10 @@
       "package": "com.whatfly.fishing",
       "versionCode": 1,
       "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
@@ -44,7 +60,7 @@
       "favicon": "./assets/images/favicon.png",
       "build": {
         "babel": {
-          "include": ["@rnmapbox/maps"]
+          "include": []
         }
       }
     },
@@ -59,13 +75,7 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsImpl": "mapbox",
-          "RNMapboxMapsDownloadToken": "sk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWcwNWdlemswYWg4MmtwdGJxNWk0bDQzIn0.jJAUJn5dLT4dnLClfaqeZA"
-        }
-      ]
+      "expo-web-browser",
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import React, { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
     Alert,
     Image,
@@ -24,25 +24,46 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [showVerificationMessage, setShowVerificationMessage] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
   const { user, signIn, signUp, resetPassword, refreshAuth } = useAuth();
+  const searchParams = useLocalSearchParams();
 
-  // If user is already authenticated, show a success message instead of redirecting
+  // Handle email verification success
+  useEffect(() => {
+    if (searchParams.verified === 'true') {
+      console.log('AuthScreen: Email verification detected');
+      setEmailVerified(true);
+      setStatus('Email verified successfully! You can now sign in.');
+      // Refresh auth state to check if user is now authenticated
+      refreshAuth();
+      
+      // Auto-redirect after 3 seconds if user becomes authenticated
+      const timer = setTimeout(() => {
+        if (user) {
+          console.log('AuthScreen: Auto-redirecting verified user to main app');
+          router.replace('/(tabs)');
+        }
+      }, 3000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams.verified, refreshAuth, user, router]);
+
+  // If user is already authenticated, automatically redirect to main app
+  useEffect(() => {
+    if (user) {
+      console.log('AuthScreen: User is already authenticated, redirecting to main app');
+      router.replace('/(tabs)');
+    }
+  }, [user, router]);
+
+  // Show loading screen while redirecting authenticated users
   if (user) {
-    console.log('AuthScreen: User is already authenticated');
     return (
       <View style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.title}>✅ Already Signed In</Text>
-          <Text style={styles.message}>You're already signed in as {user.email}</Text>
-          <TouchableOpacity 
-            style={styles.button}
-            onPress={() => {
-              // Navigate back to main app
-              router.back();
-            }}
-          >
-            <Text style={styles.buttonText}>Continue to App</Text>
-          </TouchableOpacity>
+          <Text style={styles.title}>✅ Welcome back!</Text>
+          <Text style={styles.message}>Redirecting to your fishing dashboard...</Text>
         </View>
       </View>
     );
@@ -178,6 +199,29 @@ export default function AuthScreen() {
                 onPress={() => setShowVerificationMessage(false)}
               >
                 <Text style={styles.verificationButtonText}>Got it!</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {emailVerified ? (
+            <View style={[styles.verificationContainer, styles.successContainer]}>
+              <Text style={[styles.verificationTitle, styles.successTitle]}>✅ Email Verified!</Text>
+              <Text style={styles.verificationText}>
+                Your email has been successfully verified. You can now sign in to your account.
+              </Text>
+              <TouchableOpacity
+                style={[styles.verificationButton, styles.successButton]}
+                onPress={() => {
+                  setEmailVerified(false);
+                  if (user) {
+                    // If user is already authenticated (which they should be after email verification), go to main app
+                    router.replace('/(tabs)');
+                  }
+                }}
+              >
+                <Text style={[styles.verificationButtonText, styles.successButtonText]}>
+                  {user ? 'Continue to App' : 'Continue to Sign In'}
+                </Text>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -324,6 +368,19 @@ const styles = StyleSheet.create({
     color: '#1a4d3a',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  successContainer: {
+    backgroundColor: '#1a4d3a',
+    borderColor: '#22c55e',
+  },
+  successTitle: {
+    color: '#22c55e',
+  },
+  successButton: {
+    backgroundColor: '#22c55e',
+  },
+  successButtonText: {
+    color: '#ffffff',
   },
   footer: {
     marginTop: 40,

@@ -3,10 +3,10 @@
 
 export const MAPBOX_CONFIG = {
   // Public access token for client-side map rendering
-  ACCESS_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWZyNmQ1NDQwNjZvMm1vaTRxeG5nenZsIn0.X3taJgWOAVZPr0kTzxn2Vg',
+  ACCESS_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWdjdndvcmcwOGR6MmpwczAwdzFzbzBnIn0.UnxcMVxCP3aMw7njywx7lA',
   
   // Download token for offline maps (optional)
-  DOWNLOAD_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_DOWNLOAD_TOKEN || 'pk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWZyNmQ1NDQwNjZvMm1vaTRxeG5nenZsIn0.X3taJgWOAVZPr0kTzxn2Vg',
+  DOWNLOAD_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_DOWNLOAD_TOKEN || 'pk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWdjdndvcmcwOGR6MmpwczAwdzFzbzBnIn0.UnxcMVxCP3aMw7njywx7lA',
   
   // Default map style
   DEFAULT_STYLE: 'mapbox://styles/mapbox/streets-v12',

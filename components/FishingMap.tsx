@@ -7,6 +7,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
@@ -21,6 +22,7 @@ import {
     WeatherData
 } from '../lib/locationService';
 import { MAPBOX_CONFIG } from '../lib/mapboxConfig';
+import { WaterConditions, WaterConditionsService } from '../lib/waterConditionsService';
 
 // Import Mapbox for native platforms
 let Mapbox: any = null;
@@ -46,9 +48,14 @@ export default function FishingMap({ onLocationSelect, onFliesRecommended }: Fis
   const [selectedLocation, setSelectedLocation] = useState<RiverLocation | null>(null);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [waterData, setWaterData] = useState<USGSWaterData | null>(null);
+  const [waterConditions, setWaterConditions] = useState<WaterConditions | null>(null);
   const [recommendedFlies, setRecommendedFlies] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const mapRef = useRef<Mapbox.MapView>(null);
 
   // Default camera position (Provo River)
@@ -79,19 +86,36 @@ export default function FishingMap({ onLocationSelect, onFliesRecommended }: Fis
         setWaterData(waterData);
       }
 
-      // Get fly recommendations
-      if (nearestRiver) {
+      // Fetch real-time water conditions
+      console.log('Fetching real-time water conditions...');
+      const waterConditions = await WaterConditionsService.getWaterConditions(coords);
+      setWaterConditions(waterConditions);
+      
+      if (waterConditions) {
+        console.log('Water conditions found:', {
+          flowRate: waterConditions.flowRate,
+          waterTemperature: waterConditions.waterTemperature,
+          gaugeHeight: waterConditions.gaugeHeight,
+          stationName: waterConditions.stationName,
+          dataSource: waterConditions.dataSource
+        });
+      }
+
+      // Get fly recommendations with enhanced water data
+      // Always get recommendations if we have water conditions or found a river
+      if (nearestRiver || waterConditions) {
         const flies = await getRecommendedFlies({
           river: nearestRiver,
           weather,
           waterData,
+          waterConditions, // Pass the new water conditions
           season: getCurrentSeason(),
         });
         setRecommendedFlies(flies);
         onFliesRecommended?.(flies);
       }
 
-      // Notify parent component
+      // Notify parent component with enhanced data
       onLocationSelect?.(coords, nearestRiver);
 
       // Show results modal
@@ -110,9 +134,61 @@ export default function FishingMap({ onLocationSelect, onFliesRecommended }: Fis
     setSelectedLocation(null);
     setWeatherData(null);
     setWaterData(null);
+    setWaterConditions(null);
     setRecommendedFlies([]);
     setShowResults(false);
   }, []);
+
+  const searchLocation = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_CONFIG.ACCESS_TOKEN}&types=place,locality,address,poi&limit=5`
+      );
+      const data = await response.json();
+      
+      if (data.features && data.features.length > 0) {
+        setSearchResults(data.features);
+        setShowSearchResults(true);
+      } else {
+        setSearchResults([]);
+        setShowSearchResults(false);
+        Alert.alert('No Results', 'No locations found for your search.');
+      }
+    } catch (error) {
+      console.error('Error searching location:', error);
+      Alert.alert('Search Error', 'Failed to search for locations. Please try again.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSearchResultSelect = async (result: any) => {
+    const [longitude, latitude] = result.center;
+    
+    // Move map camera to the selected location
+    if (mapRef.current && Mapbox) {
+      mapRef.current.setCamera({
+        centerCoordinate: [longitude, latitude],
+        zoomLevel: 12,
+        animationDuration: 1000,
+      });
+    }
+    
+    // Clear search UI
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowSearchResults(false);
+    
+    // Trigger location analysis
+    await handleMapPress(null, [longitude, latitude]);
+  };
 
   const getCurrentSeason = (): string => {
     const month = new Date().getMonth();
@@ -171,11 +247,72 @@ export default function FishingMap({ onLocationSelect, onFliesRecommended }: Fis
 
           {waterData && (
             <View style={styles.infoCard}>
-              <Text style={styles.cardTitle}>💧 Water Conditions</Text>
+              <Text style={styles.cardTitle}>💧 Water Conditions (Legacy)</Text>
               <Text style={styles.cardText}>Flow Rate: {waterData.flowRate} cfs</Text>
               <Text style={styles.cardText}>Water Temperature: {waterData.waterTemperature}°F</Text>
               <Text style={styles.cardText}>Water Level: {waterData.waterLevel} ft</Text>
               <Text style={styles.cardText}>Station: {waterData.stationName}</Text>
+            </View>
+          )}
+
+          {waterConditions && (
+            <View style={styles.infoCard}>
+              <Text style={styles.cardTitle}>🌊 Real-Time Water Conditions</Text>
+              <View style={styles.waterConditionsHeader}>
+                <Text style={styles.cardText}>
+                  {WaterConditionsService.getWaterConditionSummary(waterConditions)}
+                </Text>
+                <View style={[
+                  styles.dataQualityBadge,
+                  { backgroundColor: waterConditions.dataQuality === 'GOOD' ? '#4CAF50' : 
+                                    waterConditions.dataQuality === 'FAIR' ? '#FF9800' : '#F44336' }
+                ]}>
+                  <Text style={styles.dataQualityText}>
+                    {waterConditions.dataQuality || 'UNKNOWN'}
+                  </Text>
+                </View>
+              </View>
+              
+              {waterConditions.flowRate && (
+                <Text style={styles.cardText}>Flow Rate: {waterConditions.flowRate} cfs</Text>
+              )}
+              {waterConditions.waterTemperature && (
+                <Text style={styles.cardText}>Water Temp: {waterConditions.waterTemperature}°F</Text>
+              )}
+              {waterConditions.gaugeHeight && (
+                <Text style={styles.cardText}>Gauge Height: {waterConditions.gaugeHeight} ft</Text>
+              )}
+              {waterConditions.stationName && (
+                <Text style={styles.cardText}>Station: {waterConditions.stationName}</Text>
+              )}
+              {waterConditions.dataSource && (
+                <Text style={styles.cardText}>Data Source: {waterConditions.dataSource}</Text>
+              )}
+              {waterConditions.lastUpdated && (
+                <Text style={styles.cardSubtext}>
+                  Last Updated: {new Date(waterConditions.lastUpdated).toLocaleString()}
+                </Text>
+              )}
+              
+              {/* Water condition rating */}
+              {(() => {
+                const rating = WaterConditionsService.getWaterConditionRating(waterConditions);
+                return (
+                  <View style={styles.ratingContainer}>
+                    <Text style={[
+                      styles.ratingText,
+                      { color: rating.rating === 'EXCELLENT' ? '#4CAF50' :
+                               rating.rating === 'GOOD' ? '#8BC34A' :
+                               rating.rating === 'FAIR' ? '#FF9800' : '#F44336' }
+                    ]}>
+                      🎣 {rating.description}
+                    </Text>
+                    {rating.factors.map((factor, index) => (
+                      <Text key={index} style={styles.factorText}>• {factor}</Text>
+                    ))}
+                  </View>
+                );
+              })()}
             </View>
           )}
 
@@ -216,6 +353,65 @@ export default function FishingMap({ onLocationSelect, onFliesRecommended }: Fis
   if (Platform.OS === 'web' || !Mapbox) {
     return (
       <View style={styles.container}>
+        {/* Search Bar for Web/Placeholder */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputWrapper}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search for a location..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={() => searchLocation(searchQuery)}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity 
+                onPress={() => {
+                  setSearchQuery('');
+                  setSearchResults([]);
+                  setShowSearchResults(false);
+                }}
+                style={styles.clearSearchButton}
+              >
+                <Text style={styles.clearSearchText}>✕</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity 
+              style={styles.searchButton}
+              onPress={() => searchLocation(searchQuery)}
+              disabled={isSearching}
+            >
+              {isSearching ? (
+                <ActivityIndicator size="small" color="#25292e" />
+              ) : (
+                <Text style={styles.searchButtonText}>Search</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Search Results Dropdown */}
+          {showSearchResults && searchResults.length > 0 && (
+            <View style={styles.searchResultsContainer}>
+              <ScrollView style={styles.searchResultsList}>
+                {searchResults.map((result, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.searchResultItem}
+                    onPress={() => handleSearchResultSelect(result)}
+                  >
+                    <Text style={styles.searchResultTitle}>{result.place_name}</Text>
+                    <Text style={styles.searchResultSubtitle}>
+                      {result.place_type?.join(', ') || 'Location'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+
         <View style={styles.placeholderContainer}>
           <Text style={styles.placeholderTitle}>🗺️ Fishing Map</Text>
           <Text style={styles.placeholderText}>
@@ -258,6 +454,39 @@ export default function FishingMap({ onLocationSelect, onFliesRecommended }: Fis
               <Text style={styles.locationButtonText}>🏔️ Deer Creek Reservoir</Text>
               <Text style={styles.locationButtonSubtext}>40.45°N, 111.5°W</Text>
             </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.locationButton}
+              onPress={() => {
+                const coords = { latitude: 40.9, longitude: -109.4 };
+                handleMapPress(null, [coords.longitude, coords.latitude]);
+              }}
+            >
+              <Text style={styles.locationButtonText}>🌊 Green River - Flaming Gorge</Text>
+              <Text style={styles.locationButtonSubtext}>40.9°N, 109.4°W</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.locationButton}
+              onPress={() => {
+                const coords = { latitude: 41.2, longitude: -111.8 };
+                handleMapPress(null, [coords.longitude, coords.latitude]);
+              }}
+            >
+              <Text style={styles.locationButtonText}>🏞️ Weber River - Main Stem</Text>
+              <Text style={styles.locationButtonSubtext}>41.2°N, 111.8°W</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.locationButton}
+              onPress={() => {
+                const coords = { latitude: 40.2, longitude: -111.2 };
+                handleMapPress(null, [coords.longitude, coords.latitude]);
+              }}
+            >
+              <Text style={styles.locationButtonText}>🐟 Strawberry Reservoir</Text>
+              <Text style={styles.locationButtonSubtext}>40.2°N, 111.2°W</Text>
+            </TouchableOpacity>
           </View>
           
           <Text style={styles.noteText}>
@@ -275,19 +504,17 @@ export default function FishingMap({ onLocationSelect, onFliesRecommended }: Fis
         ref={mapRef}
         style={styles.map}
         styleURL={MAPBOX_CONFIG.DEFAULT_STYLE}
+        onPress={(feature) => {
+          if (feature.geometry && feature.geometry.coordinates) {
+            handleMapPress(feature, feature.geometry.coordinates);
+          }
+        }}
       >
         <Mapbox.Camera
           defaultSettings={defaultCamera}
           centerCoordinate={defaultCamera.centerCoordinate}
           zoomLevel={defaultCamera.zoomLevel}
         />
-
-        <Mapbox.ShapeSource
-          id="mapPress"
-          onPress={handleMapPress}
-        >
-          <Mapbox.FillLayer id="mapPressFill" style={{ fillOpacity: 0 }} />
-        </Mapbox.ShapeSource>
 
         {selectedCoordinates && (
           <Mapbox.PointAnnotation
@@ -301,6 +528,65 @@ export default function FishingMap({ onLocationSelect, onFliesRecommended }: Fis
         )}
       </Mapbox.MapView>
 
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputWrapper}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search for a location..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={() => searchLocation(searchQuery)}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity 
+              onPress={() => {
+                setSearchQuery('');
+                setSearchResults([]);
+                setShowSearchResults(false);
+              }}
+              style={styles.clearSearchButton}
+            >
+              <Text style={styles.clearSearchText}>✕</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity 
+            style={styles.searchButton}
+            onPress={() => searchLocation(searchQuery)}
+            disabled={isSearching}
+          >
+            {isSearching ? (
+              <ActivityIndicator size="small" color="#25292e" />
+            ) : (
+              <Text style={styles.searchButtonText}>Search</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Search Results Dropdown */}
+        {showSearchResults && searchResults.length > 0 && (
+          <View style={styles.searchResultsContainer}>
+            <ScrollView style={styles.searchResultsList}>
+              {searchResults.map((result, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.searchResultItem}
+                  onPress={() => handleSearchResultSelect(result)}
+                >
+                  <Text style={styles.searchResultTitle}>{result.place_name}</Text>
+                  <Text style={styles.searchResultSubtitle}>
+                    {result.place_type?.join(', ') || 'Location'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+      </View>
+
       {isLoading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#ffd33d" />
@@ -308,9 +594,22 @@ export default function FishingMap({ onLocationSelect, onFliesRecommended }: Fis
         </View>
       )}
 
+      {selectedCoordinates && !isLoading && (
+        <View style={styles.viewDetailsButtonContainer}>
+          <TouchableOpacity 
+            style={styles.viewDetailsButton}
+            onPress={() => setShowResults(true)}
+          >
+            <Text style={styles.viewDetailsButtonText}>📍 View Location Details</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.instructions}>
         <Text style={styles.instructionsText}>
-          Tap anywhere on the map to get fishing recommendations for that location
+          {selectedCoordinates 
+            ? 'Location selected! Tap "View Location Details" or select another location'
+            : 'Tap anywhere on the map to get fishing recommendations for that location'}
         </Text>
       </View>
 
@@ -429,6 +728,47 @@ const styles = StyleSheet.create({
     color: '#ccc',
     marginBottom: 5,
   },
+  cardSubtext: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 5,
+    fontStyle: 'italic',
+  },
+  waterConditionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  dataQualityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 10,
+  },
+  dataQualityText: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  ratingContainer: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  ratingText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  factorText: {
+    fontSize: 12,
+    color: '#4CAF50',
+    marginBottom: 2,
+  },
   flyItem: {
     backgroundColor: '#2a2a2a',
     borderRadius: 8,
@@ -542,5 +882,115 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
     fontStyle: 'italic',
+  },
+  searchContainer: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 10,
+    zIndex: 1000,
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  searchIcon: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#25292e',
+    padding: 0,
+  },
+  clearSearchButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  clearSearchText: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: 'bold',
+  },
+  searchButton: {
+    backgroundColor: '#ffd33d',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
+    minWidth: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchButtonText: {
+    color: '#25292e',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  searchResultsContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginTop: 8,
+    maxHeight: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  searchResultsList: {
+    maxHeight: 300,
+  },
+  searchResultItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  searchResultTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#25292e',
+    marginBottom: 4,
+  },
+  searchResultSubtitle: {
+    fontSize: 12,
+    color: '#666',
+  },
+  viewDetailsButtonContainer: {
+    position: 'absolute',
+    top: 80,
+    left: 20,
+    right: 20,
+    zIndex: 999,
+  },
+  viewDetailsButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    borderWidth: 2,
+    borderColor: '#66BB6A',
+  },
+  viewDetailsButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

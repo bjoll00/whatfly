@@ -1,5 +1,6 @@
 import { User } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
 interface AuthContextType {
@@ -64,9 +65,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
+    // Use deep links for mobile apps to redirect back to the app after email verification
+    let redirectTo: string;
+    
+    if (Platform.OS === 'web') {
+      // Web platform - use web URL
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isDevelopment) {
+        redirectTo = `${window.location.origin}/auth?verified=true`;
+      } else {
+        redirectTo = 'https://whatfly.app/auth?verified=true';
+      }
+    } else {
+      // Mobile platform (iOS/Android) - use deep link to redirect back to the app
+      redirectTo = 'whatfly://auth?verified=true';
+    }
+
+    console.log('AuthContext: Using email confirmation redirect URL:', redirectTo);
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: redirectTo,
+      },
     });
     console.log('Sign up response:', { data, error });
     return { data, error };
@@ -77,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Determine the redirect URL based on platform
         let redirectTo: string;
-        if (typeof window !== 'undefined') {
+        if (Platform.OS === 'web') {
           // Check if we're in development (localhost) or production
           const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
           if (isDevelopment) {

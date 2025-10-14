@@ -1,7 +1,40 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { Linking } from 'react-native';
 import { AuthProvider } from '../lib/AuthContext';
 
 export default function RootLayout() {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Handle deep links when app is already running
+    const handleDeepLink = (url: string) => {
+      console.log('RootLayout: Received deep link:', url);
+      
+      // Check if it's an email verification link
+      if (url.includes('whatfly://auth?verified=true')) {
+        console.log('RootLayout: Email verification deep link detected');
+        router.push('/auth?verified=true');
+      }
+    };
+
+    // Listen for deep links
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleDeepLink(url);
+    });
+
+    // Handle deep link if app was opened via deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleDeepLink(url);
+      }
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, [router]);
+
   return (
     <AuthProvider>
       <Stack>

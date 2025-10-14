@@ -139,23 +139,18 @@ export default function TabLayout() {
         }}
         >
 
-        <Tabs.Screen name="index" options={{ title: 'Home',
-        tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home-sharp' : 'home-outline'} color={color} size={24} />
-        ),
-        }} />
         <Tabs.Screen name="whatfly/index" options={{ title: 'What Fly', tabBarIcon: ({ color, focused }) => (
             <FontAwesome6 name={focused ? "mosquito" : "mosquito"} size={24} color={color} />
         ),
     }}/>
-        <Tabs.Screen name="map" options={{ title: 'Map', tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'map' : 'map-outline'} color={color} size={24} />
-        ),
-    }} />
         <Tabs.Screen name="catchlog" options={{ title: 'Catch Log', tabBarIcon: ({ color, focused }) => (
                 <Ionicons name={focused ?'fish-sharp' : 'fish-outline'} color={color} size={24} />
             ),
         }} />
+        <Tabs.Screen name="map" options={{ title: 'Map', tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'map' : 'map-outline'} color={color} size={24} />
+        ),
+    }} />
         <Tabs.Screen 
             name="feedback/index" 
             options={{ 

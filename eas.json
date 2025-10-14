@@ -5,7 +5,15 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWdjdndvcmcwOGR6MmpwczAwdzFzbzBnIn0.UnxcMVxCP3aMw7njywx7lA",
+        "MAPBOX_DOWNLOADS_TOKEN": "sk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWdoOHdnbnEwZjlpMmpvZDZibm9idjZ0In0.bym2OsyOzJ-Q78UzB-E5Rw"
+      },
+      "ios": {
+        "simulator": false,
+        "buildConfiguration": "Debug"
+      }
     },
     "preview": {
       "distribution": "internal",
@@ -23,7 +31,13 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "corbinbrandonwilliams@gmail.com",
+        "ascAppId": "6752791469",
+        "appleTeamId": "KB56ZR7SSU"
+      }
+    }
   }
 }
 

@@ -21,7 +21,7 @@ export default function Index() {
 
   // Always redirect to tabs - let the tab layout handle guest vs authenticated users
   console.log('Index: Redirecting to main app');
-  return <Redirect href="/(tabs)" />;
+  return <Redirect href="/(tabs)/map" />;
 }
 
 const styles = StyleSheet.create({

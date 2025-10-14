@@ -134,9 +134,10 @@ export async function fetchUSGS(riverId: string): Promise<USGSWaterData | null> 
  * This function integrates with the existing fly suggestion service
  */
 export async function getRecommendedFlies(params: {
-  river: RiverLocation;
+  river?: RiverLocation; // Make river optional
   weather: WeatherData;
   waterData: USGSWaterData | null;
+  waterConditions?: any; // Add water conditions parameter
   season: string;
 }): Promise<any[]> {
   console.log('Getting recommended flies with params:', params);
@@ -149,6 +150,7 @@ export async function getRecommendedFlies(params: {
       river: params.river,
       weather: params.weather,
       waterData: params.waterData,
+      waterConditions: params.waterConditions, // Pass water conditions
     });
 
     if (result.success && result.suggestions) {
@@ -168,12 +170,14 @@ export async function getRecommendedFlies(params: {
  * Fallback mock recommendations when the integration service fails
  */
 function getMockRecommendations(params: {
-  river: RiverLocation;
+  river?: RiverLocation; // Make river optional
   weather: WeatherData;
   waterData: USGSWaterData | null;
+  waterConditions?: any; // Add water conditions parameter
   season: string;
 }): any[] {
-  return [
+  // Generate recommendations based on available data
+  const baseRecommendations = [
     {
       fly: {
         id: '1',
@@ -184,7 +188,7 @@ function getMockRecommendations(params: {
         description: 'Excellent all-around dry fly'
       },
       confidence: 0.85,
-      reason: 'Perfect conditions for dry fly fishing with moderate flows'
+      reason: 'Perfect conditions for dry fly fishing'
     },
     {
       fly: {
@@ -196,9 +200,53 @@ function getMockRecommendations(params: {
         description: 'Imitates various aquatic insects'
       },
       confidence: 0.78,
-      reason: 'Good nymphing conditions with clear water'
+      reason: 'Good nymphing conditions'
     }
   ];
+
+  // Enhance recommendations with water conditions data if available
+  if (params.waterConditions) {
+    const waterConditions = params.waterConditions;
+    baseRecommendations.forEach(fly => {
+      let additionalReasons = [];
+      
+      if (waterConditions.flowRate) {
+        if (waterConditions.flowRate > 200) {
+          additionalReasons.push('High flow conditions');
+          fly.confidence += 0.1;
+        } else if (waterConditions.flowRate < 50) {
+          additionalReasons.push('Low flow conditions');
+          fly.confidence += 0.05;
+        } else {
+          additionalReasons.push('Optimal flow conditions');
+          fly.confidence += 0.15;
+        }
+      }
+      
+      if (waterConditions.waterTemperature) {
+        if (waterConditions.waterTemperature < 40) {
+          additionalReasons.push('Cold water - slow presentation');
+          fly.confidence += 0.1;
+        } else if (waterConditions.waterTemperature > 60) {
+          additionalReasons.push('Warm water - active fish');
+          fly.confidence += 0.15;
+        }
+      }
+      
+      if (waterConditions.stationName) {
+        additionalReasons.push(`Data from ${waterConditions.stationName}`);
+      }
+      
+      if (additionalReasons.length > 0) {
+        fly.reason += ` (${additionalReasons.join(', ')})`;
+      }
+      
+      // Cap confidence at 1.0
+      fly.confidence = Math.min(fly.confidence, 1.0);
+    });
+  }
+
+  return baseRecommendations;
 }
 
 // Helper functions
