@@ -1,8 +1,8 @@
 import { Picker } from '@react-native-picker/picker';
-import { Image } from 'expo-image';
 import * as Location from 'expo-location';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,14 +15,16 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import FlyDetailModal from '../../../components/FlyDetailModal';
+import FlySuggestionCard from '../../../components/FlySuggestionCard';
 import LocationPicker from '../../../components/LocationPicker';
 import PopularFliesSection from '../../../components/PopularFliesSection';
 import PremiumUpgradeModal from '../../../components/PremiumUpgradeModal';
-import WaterConditionsInput from '../../../components/WaterConditionsInput';
 import { useAuth } from '../../../lib/AuthContext';
+import { useFishing, useLocationData } from '../../../lib/FishingContext';
 import { APP_CONFIG } from '../../../lib/appConfig';
 import { autoDetectionService } from '../../../lib/autoDetectionService';
-import { getFlyImage, hasFlyImage } from '../../../lib/flyImages';
+import { enhancedFlySuggestionService } from '../../../lib/enhancedFlySuggestionService';
 import { flySuggestionService } from '../../../lib/flySuggestionService';
 import { FishingConditions, FlySuggestion, WeatherData } from '../../../lib/types';
 import { WaterConditionsService } from '../../../lib/waterConditionsService';
@@ -30,6 +32,12 @@ import { weatherService } from '../../../lib/weatherService';
 
 export default function WhatFlyScreen() {
   const { user } = useAuth();
+  const { fishingConditions, setFishingConditions } = useFishing();
+  const { hasLocation, hasCoordinates, hasCompleteData } = useLocationData();
+  const params = useLocalSearchParams();
+  const hasProcessedParams = useRef<string | false>(false);
+  const [isProcessingMapData, setIsProcessingMapData] = useState(false);
+  const finalConditionsRef = useRef<Partial<FishingConditions> | null>(null);
   
   // Mode selection: 'trip' or 'current'
   const [mode, setMode] = useState<'trip' | 'current'>('current');
@@ -45,8 +53,8 @@ export default function WhatFlyScreen() {
     address?: string;
   } | null>(null);
   
-  // Conditions state
-  const [conditions, setConditions] = useState<Partial<FishingConditions>>({
+  // Use global fishing conditions from context
+  const conditions = fishingConditions || {
     location: '',
     latitude: undefined,
     longitude: undefined,
@@ -58,7 +66,7 @@ export default function WhatFlyScreen() {
     time_of_day: 'morning',
     time_of_year: 'summer',
     water_temperature: undefined,
-  });
+  };
 
   // Results state
   const [suggestions, setSuggestions] = useState<FlySuggestion[]>([]);
@@ -66,6 +74,10 @@ export default function WhatFlyScreen() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [usageInfo, setUsageInfo] = useState<any>(null);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  
+  // Fly detail modal
+  const [selectedFlySuggestion, setSelectedFlySuggestion] = useState<FlySuggestion | null>(null);
+  const [showFlyDetailModal, setShowFlyDetailModal] = useState(false);
   const [weatherInsights, setWeatherInsights] = useState<string[]>([]);
   const [isLoadingWeather, setIsLoadingWeather] = useState(false);
   const [autoDetectedInfo, setAutoDetectedInfo] = useState<{
@@ -85,6 +97,9 @@ export default function WhatFlyScreen() {
   } | null>(null);
   const [isLocationLoading, setIsLocationLoading] = useState(false);
   
+  // Comprehensive conditions display state
+  const [showComprehensiveConditions, setShowComprehensiveConditions] = useState(false);
+  
   // Date picker modal state
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [startMonth, setStartMonth] = useState('');
@@ -95,14 +110,222 @@ export default function WhatFlyScreen() {
   const [endYear, setEndYear] = useState('');
 
   const handleInputChange = (field: keyof FishingConditions, value: any) => {
-    setConditions(prev => ({ ...prev, [field]: value }));
+    setFishingConditions({ ...conditions, [field]: value });
   };
 
-  // Manual location refresh function
-  const refreshLocation = async () => {
-    console.log('Manual location refresh requested');
-    await getCurrentLocation();
-  };
+  // Check for location data from map via URL params
+  useEffect(() => {
+    const checkLocationParams = () => {
+      console.log('checkLocationParams called with params:', {
+        lat: params.lat,
+        lng: params.lng,
+        name: params.name,
+        address: params.address,
+        fishingConditions: params.fishingConditions ? 'present' : 'missing',
+        allKeys: Object.keys(params)
+      });
+      
+      if (params.lat && params.lng) {
+        console.log('Found location params from map:', params);
+        
+        // Check if this is a new location by comparing coordinates
+        const currentCoords = `${params.lat},${params.lng}`;
+        const lastProcessedCoords = hasProcessedParams.current;
+        
+        if (currentCoords !== lastProcessedCoords) {
+          console.log('New location detected, processing fresh data...');
+          setIsProcessingMapData(true);
+          
+          // Clear previous suggestions for fresh data
+          setSuggestions([]);
+          setWeatherInsights([]);
+          setSmartSuggestions([]);
+          setAutoDetectedInfo(null);
+          
+          // Mark that we've processed these specific coordinates
+          hasProcessedParams.current = currentCoords;
+          
+          // Mark processing as complete
+          setIsProcessingMapData(false);
+        
+        // Parse weather data if available
+        let weatherDataFromMap = null;
+        if (params.weatherData) {
+          try {
+            weatherDataFromMap = JSON.parse(params.weatherData as string);
+            console.log('Parsed weather data from map:', weatherDataFromMap);
+          } catch (error) {
+            console.error('Error parsing weather data:', error);
+          }
+        }
+        
+        // Parse water conditions if available
+        let waterConditionsFromMap = null;
+        if (params.waterConditions) {
+          try {
+            waterConditionsFromMap = JSON.parse(params.waterConditions as string);
+            console.log('Parsed water conditions from map:', waterConditionsFromMap);
+          } catch (error) {
+            console.error('Error parsing water conditions:', error);
+          }
+        }
+        
+        // Parse fishing conditions if available
+        let fishingConditionsFromMap = null;
+        if (params.fishingConditions) {
+          try {
+            fishingConditionsFromMap = JSON.parse(params.fishingConditions as string);
+            console.log('Parsed fishing conditions from map:', fishingConditionsFromMap);
+            console.log('Location in fishing conditions:', fishingConditionsFromMap?.location);
+            console.log('All fishing conditions keys:', Object.keys(fishingConditionsFromMap || {}));
+          } catch (error) {
+            console.error('Error parsing fishing conditions:', error);
+          }
+        }
+        
+        // Populate the form with the location data from URL params
+        setFishingConditions({
+          ...conditions,
+          location: params.name as string || 'Selected Location',
+          latitude: parseFloat(params.lat as string),
+          longitude: parseFloat(params.lng as string),
+          location_address: params.address as string || `${parseFloat(params.lat as string).toFixed(4)}, ${parseFloat(params.lng as string).toFixed(4)}`
+        });
+        
+        // Set weather data if available
+        if (weatherDataFromMap) {
+          setWeatherData(weatherDataFromMap);
+          
+          // Validate weather data structure before processing
+          if (weatherDataFromMap && typeof weatherDataFromMap === 'object') {
+            // Ensure required fields exist with fallbacks
+            const validatedWeatherData = {
+              ...weatherDataFromMap,
+              weather_condition: weatherDataFromMap.weather_condition || 'sunny',
+              temperature: weatherDataFromMap.temperature || 20,
+              humidity: weatherDataFromMap.humidity || 50,
+              wind_speed: weatherDataFromMap.wind_speed || 0,
+              wind_direction: weatherDataFromMap.wind_direction || 0,
+              cloudiness: weatherDataFromMap.cloudiness || 0,
+              pressure: weatherDataFromMap.pressure || 1013
+            };
+            
+            // Convert weather data to conditions format with error handling
+            try {
+              const weatherConditions = weatherService.convertToFishingConditions(validatedWeatherData);
+              setFishingConditions({
+                ...conditions,
+                ...weatherConditions
+              });
+            } catch (error) {
+              console.error('Error converting weather data to fishing conditions:', error);
+              // Set default weather conditions if conversion fails
+              setFishingConditions({
+                ...conditions,
+                weather_conditions: 'sunny',
+                wind_speed: 'light',
+                wind_direction: 'variable',
+                air_temperature_range: 'moderate'
+              });
+            }
+          } else {
+            console.warn('Invalid weather data structure:', weatherDataFromMap);
+            // Set default weather conditions if data is invalid
+            setFishingConditions({
+              ...conditions,
+              weather_conditions: 'sunny',
+              wind_speed: 'light',
+              wind_direction: 'variable',
+              air_temperature_range: 'moderate'
+            });
+          }
+        }
+        
+        // Set water conditions if available
+        if (waterConditionsFromMap) {
+          setWaterConditions(waterConditionsFromMap);
+        }
+        
+        // Use fishing conditions from map if available (most comprehensive)
+        if (fishingConditionsFromMap) {
+          console.log('Using comprehensive fishing conditions from map');
+          console.log('Map fishing conditions:', fishingConditionsFromMap);
+          
+          // Ensure location is set from params if not in fishing conditions
+          const finalConditions = {
+            ...fishingConditionsFromMap,
+            location: fishingConditionsFromMap.location || params.name as string || 'Selected Location',
+            location_address: fishingConditionsFromMap.location_address || params.address as string || `${parseFloat(params.lat as string).toFixed(4)}, ${parseFloat(params.lng as string).toFixed(4)}`
+          };
+          
+          console.log('Setting final conditions with location:', {
+            originalLocation: fishingConditionsFromMap.location,
+            paramsName: params.name,
+            finalLocation: finalConditions.location
+          });
+          
+          setFishingConditions(finalConditions);
+          
+          // Wait for state to update before proceeding
+          setTimeout(() => {
+            console.log('Final conditions set from map:', {
+              location: params.name,
+              coordinates: `${params.lat}, ${params.lng}`,
+              weatherData: weatherDataFromMap,
+              waterConditions: waterConditionsFromMap,
+              fishingConditions: fishingConditionsFromMap,
+              timestamp: params.timestamp
+            });
+            
+            console.log('Final conditions object after processing:', finalConditions);
+            
+            // Store finalConditions for use in auto-suggestion
+            finalConditionsRef.current = finalConditions;
+          }, 100);
+        } else {
+          // Log the final conditions being used
+          console.log('Final conditions set from map:', {
+            location: params.name,
+            coordinates: `${params.lat}, ${params.lng}`,
+            weatherData: weatherDataFromMap,
+            waterConditions: waterConditionsFromMap,
+            fishingConditions: fishingConditionsFromMap,
+            timestamp: params.timestamp
+          });
+        }
+        
+          // Automatically get fly suggestions after a short delay
+          setTimeout(() => {
+            console.log('Getting fly suggestions for map location...');
+            // Only auto-suggest if we don't have comprehensive map data
+            if (!fishingConditionsFromMap) {
+              handleCurrentLocationSuggest();
+            } else {
+              console.log('🎣 WhatFly Tab: Using comprehensive map data from global context');
+              // Get fly suggestions using global context data
+              getSuggestions();
+            }
+          }, 1500); // Increased delay to ensure state is updated
+        }
+      }
+    };
+    
+    checkLocationParams();
+  }, [params.lat, params.lng, params.name, params.address, params.weatherData, params.waterConditions, params.fishingConditions]); // Include all params we use
+
+  // Log when conditions change for debugging
+  useEffect(() => {
+    console.log('Conditions state changed:', {
+      location: conditions.location,
+      latitude: conditions.latitude,
+      longitude: conditions.longitude,
+      hasLocation: !!conditions.location,
+      hasCoordinates: !!(conditions.latitude && conditions.longitude),
+      timestamp: new Date().toLocaleTimeString(),
+      allKeys: Object.keys(conditions)
+    });
+  }, [conditions]);
+
 
   // Get current location automatically
   const getCurrentLocation = async () => {
@@ -161,13 +384,13 @@ export default function WhatFlyScreen() {
       });
 
       // Update conditions with current location
-      setConditions(prev => ({
-        ...prev,
+      setFishingConditions({
+        ...conditions,
         location: address,
         latitude,
         longitude,
         location_address: address,
-      }));
+      });
 
       console.log('Current location detected:', { latitude, longitude, address });
       
@@ -181,10 +404,20 @@ export default function WhatFlyScreen() {
 
   // Auto-detect location when component mounts
   useEffect(() => {
-    if (mode === 'current' && !currentLocation) {
+    console.log('Auto-detect location check:', {
+      mode,
+      hasCurrentLocation: !!currentLocation,
+      hasConditionsLocation: !!(conditions.latitude && conditions.longitude),
+      shouldGetLocation: mode === 'current' && !currentLocation && !conditions.latitude && !conditions.longitude
+    });
+    
+    if (mode === 'current' && !currentLocation && !conditions.latitude && !conditions.longitude) {
+      console.log('Getting current location automatically...');
       getCurrentLocation();
+    } else if (conditions.latitude && conditions.longitude) {
+      console.log('Skipping auto-location - already have location from map');
     }
-  }, [mode]);
+  }, [mode, currentLocation, conditions.latitude, conditions.longitude]);
 
   // Helper functions for date picker
   const getMonths = () => {
@@ -287,13 +520,13 @@ export default function WhatFlyScreen() {
     longitude: number;
     address?: string;
   }) => {
-    setConditions(prev => ({
-      ...prev,
+    setFishingConditions({
+      ...conditions,
       location: location.name,
       latitude: location.latitude,
       longitude: location.longitude,
       location_address: location.address,
-    }));
+    });
 
     // Fetch weather data for the selected location
     await fetchWeatherData(location.latitude, location.longitude);
@@ -309,13 +542,13 @@ export default function WhatFlyScreen() {
         
         // Convert weather to fishing conditions and update form
         const fishingConditions = weatherService.convertToFishingConditions(weather);
-        setConditions(prev => ({
-          ...prev,
+        setFishingConditions({
+          ...conditions,
           weather_conditions: fishingConditions.weather_conditions,
           wind_speed: fishingConditions.wind_speed,
           wind_direction: fishingConditions.wind_direction,
           air_temperature_range: fishingConditions.air_temperature_range,
-        }));
+        });
 
         // Get fishing insights
         const insights = weatherService.getFishingInsights(weather);
@@ -329,21 +562,93 @@ export default function WhatFlyScreen() {
     }
   };
 
-  const getSuggestions = async () => {
-    if (!conditions.location) {
-      Alert.alert('Missing Information', 'Please enter a location.');
+  const getSuggestions = async (overrideConditions?: Partial<FishingConditions>) => {
+    // Use global context conditions directly - no more local state dependency
+    const currentConditions = fishingConditions || {};
+    
+    console.log('🎣 WhatFly Tab: getSuggestions called with global context conditions:', {
+      location: currentConditions.location,
+      latitude: currentConditions.latitude,
+      longitude: currentConditions.longitude,
+      hasLocation: !!currentConditions.location,
+      hasCoordinates: !!(currentConditions.latitude && currentConditions.longitude),
+      hasCompleteData: hasCompleteData,
+      allConditionsKeys: Object.keys(currentConditions),
+      isProcessingMapData: isProcessingMapData,
+      usingOverride: !!overrideConditions,
+      contextSource: 'global'
+    });
+    
+    // Wait if map data is still being processed
+    if (isProcessingMapData) {
+      console.log('Map data still being processed, waiting...');
+      setTimeout(() => getSuggestions(), 500);
+      return;
+    }
+    
+    // Check if we have basic data from global context or can use defaults
+    if (!currentConditions.location && !currentConditions.latitude && !currentConditions.longitude) {
+      console.log('🎣 WhatFly Tab: No location data from context, using default conditions');
+      // Set default conditions if no data is available
+      setFishingConditions({
+        location: 'Default Location',
+        latitude: 40.2338, // Provo River coordinates as default
+        longitude: -111.6585,
+        location_address: '40.2338, -111.6585',
+        weather_conditions: 'sunny',
+        wind_speed: 'light',
+        wind_direction: 'variable',
+        air_temperature_range: 'moderate',
+        water_conditions: 'calm',
+        water_clarity: 'clear',
+        water_level: 'normal',
+        water_flow: 'moderate',
+        time_of_day: 'morning',
+        time_of_year: 'summer',
+        water_temperature_range: 'moderate'
+      });
+      // Wait a moment for context to update, then continue
+      setTimeout(() => {
+        console.log('🎣 WhatFly Tab: Retrying getSuggestions with default conditions');
+        getSuggestions();
+      }, 100);
+      return;
+    }
+    
+    // If we have coordinates but no location name, set a default location in context
+    if (!currentConditions.location && currentConditions.latitude && currentConditions.longitude) {
+      console.log('🎣 WhatFly Tab: Setting default location name in context');
+      setFishingConditions({
+        ...currentConditions,
+        location: `Location at ${currentConditions.latitude?.toFixed(4)}, ${currentConditions.longitude?.toFixed(4)}`
+      });
+      // Wait a moment for context to update, then continue
+      setTimeout(() => {
+        console.log('🎣 WhatFly Tab: Retrying getSuggestions after setting location in context');
+        getSuggestions();
+      }, 100);
       return;
     }
 
     setIsLoading(true);
     try {
-      console.log('Getting suggestions for conditions:', conditions);
+      console.log('🎣 WhatFly Tab: Getting suggestions using global context conditions:', currentConditions);
+      console.log('🎣 WhatFly Tab: User ID:', user?.id);
+      console.log('🎣 WhatFly Tab: Calling flySuggestionService.getSuggestions...');
+      
       const result = await flySuggestionService.getSuggestions(
-        conditions as FishingConditions,
+        currentConditions,
         user?.id
       );
       
-      console.log('Received suggestions result:', result);
+      console.log('🎣 WhatFly Tab: Received suggestions result:', {
+        hasSuggestions: result.suggestions?.length > 0,
+        suggestionsCount: result.suggestions?.length || 0,
+        canPerform: result.canPerform,
+        hasError: !!result.error,
+        error: result.error,
+        usageInfo: result.usageInfo
+      });
       
       if (!result.canPerform && APP_CONFIG.ENABLE_USAGE_LIMITS) {
         // User hit usage limit
@@ -356,18 +661,27 @@ export default function WhatFlyScreen() {
       setUsageInfo(result.usageInfo);
       
       if (result.suggestions.length === 0) {
+        if (result.error) {
+          Alert.alert('Error', `Failed to get fly suggestions: ${result.error}`);
+        } else {
         Alert.alert('No Suggestions', 'No fly suggestions found. The database might be empty or there might be a connection issue.');
+        }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to get fly suggestions. Please try again.');
-      console.error('Error getting suggestions:', error);
+      console.error('🎣 WhatFly Tab: Error getting suggestions:', error);
+      console.error('🎣 WhatFly Tab: Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        currentConditions: currentConditions
+      });
+      Alert.alert('Error', `Failed to get fly suggestions: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
   };
 
   const clearForm = () => {
-    setConditions({
+    setFishingConditions({
       location: '',
       latitude: undefined,
       longitude: undefined,
@@ -412,6 +726,42 @@ export default function WhatFlyScreen() {
       const longitude = conditions.longitude || -111.8910;
       const locationName = conditions.location || 'Current Location';
       
+      // Check if we already have weather and water data from the map
+      const hasExistingWeatherData = weatherData && weatherData.temperature;
+      const hasExistingWaterData = waterConditions && (waterConditions.flowRate || waterConditions.waterTemperature);
+      const hasFishingConditionsFromMap = conditions.location && conditions.latitude && conditions.longitude && conditions.time_of_day;
+      
+      console.log('Existing data check:', { hasExistingWeatherData, hasExistingWaterData, hasFishingConditionsFromMap });
+      
+      let finalConditions = { ...conditions };
+      let finalWaterConditions = waterConditions;
+      let finalWeatherData = weatherData;
+      let finalAutoDetectedInfo = autoDetectedInfo;
+      
+      if (hasFishingConditionsFromMap) {
+        console.log('Using comprehensive fishing conditions from map...');
+        // Use the complete fishing conditions that were built in the map
+        // These already include all weather, water, lunar, and location-specific data
+        finalConditions = conditions;
+        
+        console.log('Using comprehensive map conditions:', finalConditions);
+        
+        // Don't override conditions - use them as-is
+        console.log('Preserving map conditions, not overriding:', finalConditions);
+        setFishingConditions(finalConditions);
+      } else if (hasExistingWeatherData && hasExistingWaterData) {
+        console.log('Using existing weather and water data from map...');
+        // Use existing data from map - no need to fetch new data
+        // Preserve all conditions that were set from the map
+        finalConditions = {
+          ...conditions,
+          water_data: waterConditions,
+          water_temperature: waterConditions.waterTemperature,
+        };
+        
+        console.log('Using map data - final conditions:', finalConditions);
+      } else {
+        console.log('Fetching fresh weather and water data...');
       // Auto-detect all conditions
       const autoDetected = await autoDetectionService.getAutoDetectedConditions(
         latitude,
@@ -421,47 +771,73 @@ export default function WhatFlyScreen() {
       
       console.log('Auto-detected conditions:', autoDetected);
       
-      // Fetch real-time water conditions
+        // Fetch real-time water conditions only if we don't have them
+        if (!hasExistingWaterData) {
       console.log('Fetching real-time water conditions...');
-      const waterConditions = await WaterConditionsService.getWaterConditions({ latitude, longitude });
-      setWaterConditions(waterConditions);
+          const newWaterConditions = await WaterConditionsService.getWaterConditions({ latitude, longitude });
+          finalWaterConditions = newWaterConditions;
+          setWaterConditions(newWaterConditions);
       
-      if (waterConditions) {
+          if (newWaterConditions) {
         console.log('Water conditions found:', {
-          flowRate: waterConditions.flowRate,
-          waterTemperature: waterConditions.waterTemperature,
-          gaugeHeight: waterConditions.gaugeHeight,
-          stationName: waterConditions.stationName,
-          dataSource: waterConditions.dataSource
-        });
+              flowRate: newWaterConditions.flowRate,
+              waterTemperature: newWaterConditions.waterTemperature,
+              gaugeHeight: newWaterConditions.gaugeHeight,
+              stationName: newWaterConditions.stationName,
+              dataSource: newWaterConditions.dataSource
+            });
+          }
+        }
         
-        // Enhance conditions with real water data
-        const enhancedConditions = {
+        // Use fetched or existing water conditions
+        if (finalWaterConditions) {
+          finalConditions = {
           ...autoDetected.conditions,
-          water_data: waterConditions,
-          water_temperature: waterConditions.waterTemperature || autoDetected.conditions.water_temperature,
+            water_data: finalWaterConditions,
+            water_temperature: finalWaterConditions.waterTemperature || autoDetected.conditions.water_temperature,
         };
-        setConditions(enhancedConditions);
       } else {
-        setConditions(autoDetected.conditions);
+          finalConditions = autoDetected.conditions;
       }
       
+        finalAutoDetectedInfo = autoDetected.autoDetectedInfo;
       setAutoDetectedInfo(autoDetected.autoDetectedInfo);
       
-      // Get weather data if available
-      if (autoDetected.weatherData) {
+        // Get weather data if available and we don't have existing data
+        if (autoDetected.weatherData && !hasExistingWeatherData) {
+          finalWeatherData = autoDetected.weatherData;
         setWeatherData(autoDetected.weatherData);
-        const insights = weatherService.getFishingInsights(autoDetected.weatherData);
-        setWeatherInsights(insights);
+        }
+      }
+      
+      // Set final conditions only if we didn't already set them from map data
+      if (!hasFishingConditionsFromMap) {
+        setFishingConditions(finalConditions);
+      }
+      
+      // Get weather insights if we have weather data
+      if (finalWeatherData) {
+        try {
+          const insights = weatherService.getFishingInsights(finalWeatherData);
+          setWeatherInsights(insights || []);
+        } catch (error) {
+          console.error('Error getting weather insights:', error);
+          setWeatherInsights([]);
+        }
       }
       
       // Get smart suggestions
-      const smartSuggestions = autoDetectionService.getSmartSuggestions(autoDetected.conditions);
-      setSmartSuggestions(smartSuggestions);
+      try {
+        const smartSuggestions = autoDetectionService.getSmartSuggestions(finalConditions);
+        setSmartSuggestions(smartSuggestions || []);
+      } catch (error) {
+        console.error('Error getting smart suggestions:', error);
+        setSmartSuggestions([]);
+      }
       
       // Get fly suggestions
-      const result = await flySuggestionService.getSuggestions(
-        autoDetected.conditions as FishingConditions,
+      const result = await enhancedFlySuggestionService.getSuggestions(
+        finalConditions as FishingConditions,
         user?.id
       );
       
@@ -572,7 +948,7 @@ export default function WhatFlyScreen() {
       };
 
       // Update conditions
-      setConditions(tripConditions);
+      setFishingConditions(tripConditions);
       setWeatherData(forecastWeather);
       
       // Set auto-detected info for trip
@@ -627,6 +1003,11 @@ export default function WhatFlyScreen() {
     }
   };
 
+  const handleFlySelection = (suggestion: FlySuggestion) => {
+    setSelectedFlySuggestion(suggestion);
+    setShowFlyDetailModal(true);
+  };
+
 
 
   return (
@@ -639,6 +1020,226 @@ export default function WhatFlyScreen() {
         <Text style={styles.subtitle}>
           Choose your fishing scenario to get personalized fly suggestions
         </Text>
+        
+        {/* Show helpful message about using the Map tab */}
+        <View style={styles.noLocationCard}>
+          <Text style={styles.noLocationTitle}>🎣 Fly Suggestions Moved to Map Tab</Text>
+          <Text style={styles.noLocationText}>
+            Fly suggestions are now available directly on the Map tab! Select a location on the map to get personalized fly suggestions based on real-time weather and water conditions.
+          </Text>
+        </View>
+
+        {/* Location Data Display */}
+        {(conditions.latitude && conditions.longitude) && (
+          <View style={styles.locationDataSection}>
+            <Text style={styles.locationDataTitle}>📍 Location Data</Text>
+            <Text style={styles.locationDataText}>
+              <Text style={styles.locationDataLabel}>Location:</Text> {conditions.location || 'Unknown'}
+            </Text>
+            <Text style={styles.locationDataText}>
+              <Text style={styles.locationDataLabel}>Coordinates:</Text> {conditions.latitude?.toFixed(4)}, {conditions.longitude?.toFixed(4)}
+            </Text>
+            {weatherData && (
+              <Text style={styles.locationDataText}>
+                <Text style={styles.locationDataLabel}>Weather:</Text> {weatherData.temperature}°F, {weatherData.weather_condition}, Wind: {weatherData.wind_speed} mph
+              </Text>
+            )}
+            {waterConditions && (
+              <Text style={styles.locationDataText}>
+                <Text style={styles.locationDataLabel}>Water:</Text> {waterConditions.waterTemperature}°F, Flow: {waterConditions.flowRate} cfs, Level: {waterConditions.waterLevel} ft
+              </Text>
+            )}
+            <Text style={styles.locationDataText}>
+              <Text style={styles.locationDataLabel}>Time:</Text> {conditions.time_of_day}, {conditions.time_of_year}
+            </Text>
+            <Text style={styles.locationDataText}>
+              <Text style={styles.locationDataLabel}>Conditions:</Text> {conditions.water_clarity} water, {conditions.water_level} level, {conditions.water_flow} flow
+            </Text>
+            {conditions.date && (
+              <Text style={styles.locationDataText}>
+                <Text style={styles.locationDataLabel}>Updated:</Text> {new Date().toLocaleTimeString()}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Comprehensive Conditions Display */}
+        {conditions.latitude && conditions.longitude && (
+          <View style={styles.comprehensiveConditionsSection}>
+            <TouchableOpacity
+              style={styles.comprehensiveConditionsHeader}
+              onPress={() => setShowComprehensiveConditions(!showComprehensiveConditions)}
+            >
+              <Text style={styles.comprehensiveConditionsTitle}>
+                📊 Comprehensive Fishing Conditions
+              </Text>
+              <Text style={styles.comprehensiveConditionsToggle}>
+                {showComprehensiveConditions ? '▼' : '▶'}
+              </Text>
+            </TouchableOpacity>
+            
+            {showComprehensiveConditions && (
+              <View style={styles.comprehensiveConditionsContent}>
+                {/* Weather Data */}
+                {conditions.weather_data && (
+                  <View style={styles.conditionGroup}>
+                    <Text style={styles.conditionGroupTitle}>🌦️ Weather Data</Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Temperature:</Text> {conditions.weather_data.temperature}°F
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Humidity:</Text> {conditions.weather_data.humidity}%
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Pressure:</Text> {conditions.weather_data.pressure} mb
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Visibility:</Text> {conditions.weather_data.visibility} miles
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>UV Index:</Text> {conditions.weather_data.uv_index}
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Cloud Cover:</Text> {conditions.weather_data.cloud_cover}%
+                    </Text>
+                    {conditions.weather_data.precipitation && (
+                      <Text style={styles.conditionDetail}>
+                        <Text style={styles.conditionLabel}>Precipitation:</Text> {conditions.weather_data.precipitation.probability}% chance of {conditions.weather_data.precipitation.type}
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {/* Water Data */}
+                {conditions.water_data && (
+                  <View style={styles.conditionGroup}>
+                    <Text style={styles.conditionGroupTitle}>🌊 Water Conditions</Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Flow Rate:</Text> {conditions.water_data.flowRate} cfs
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Water Temperature:</Text> {conditions.water_data.waterTemperature}°F
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Gauge Height:</Text> {conditions.water_data.gaugeHeight} ft
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Turbidity:</Text> {conditions.water_data.turbidity} NTU
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Dissolved Oxygen:</Text> {conditions.water_data.dissolvedOxygen} mg/L
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>pH:</Text> {conditions.water_data.pH}
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Station:</Text> {conditions.water_data.stationName} ({conditions.water_data.dataSource})
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Data Quality:</Text> {conditions.water_data.dataQuality}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Lunar Data */}
+                {conditions.solunar_periods && (
+                  <View style={styles.conditionGroup}>
+                    <Text style={styles.conditionGroupTitle}>🌙 Lunar & Solunar Data</Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Moon Phase:</Text> {conditions.moon_phase} ({conditions.moon_illumination}% illuminated)
+                    </Text>
+                    <Text style={styles.conditionDetail}>
+                      <Text style={styles.conditionLabel}>Lunar Feeding Activity:</Text> {conditions.lunar_feeding_activity}
+                    </Text>
+                    {conditions.solunar_periods.sunrise && (
+                      <Text style={styles.conditionDetail}>
+                        <Text style={styles.conditionLabel}>Sunrise:</Text> {new Date(conditions.solunar_periods.sunrise).toLocaleTimeString()}
+                      </Text>
+                    )}
+                    {conditions.solunar_periods.sunset && (
+                      <Text style={styles.conditionDetail}>
+                        <Text style={styles.conditionLabel}>Sunset:</Text> {new Date(conditions.solunar_periods.sunset).toLocaleTimeString()}
+                      </Text>
+                    )}
+                    {conditions.solunar_periods.moonrise && (
+                      <Text style={styles.conditionDetail}>
+                        <Text style={styles.conditionLabel}>Moonrise:</Text> {new Date(conditions.solunar_periods.moonrise).toLocaleTimeString()}
+                      </Text>
+                    )}
+                    {conditions.solunar_periods.moonset && (
+                      <Text style={styles.conditionDetail}>
+                        <Text style={styles.conditionLabel}>Moonset:</Text> {new Date(conditions.solunar_periods.moonset).toLocaleTimeString()}
+                      </Text>
+                    )}
+                    {(conditions.solunar_periods as any)?.current_period?.active && (
+                      <Text style={styles.conditionDetail}>
+                        <Text style={styles.conditionLabel}>Current Solunar Period:</Text> {(conditions.solunar_periods as any).current_period.type} ({Math.round((conditions.solunar_periods as any).current_period.remaining)} min remaining)
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {/* Hatch Data */}
+                {conditions.hatch_data && (
+                  <View style={styles.conditionGroup}>
+                    <Text style={styles.conditionGroupTitle}>🦟 Hatch Information</Text>
+                    {conditions.hatch_data.active_hatches && conditions.hatch_data.active_hatches.length > 0 && (
+                      <>
+                        <Text style={styles.conditionDetail}>
+                          <Text style={styles.conditionLabel}>Active Hatches:</Text>
+                        </Text>
+                        {conditions.hatch_data.active_hatches.map((hatch: any, index: number) => (
+                          <Text key={index} style={styles.conditionDetail}>
+                            • {hatch.insect} ({hatch.stage}) - {hatch.intensity} intensity, Size {hatch.size}
+                          </Text>
+                        ))}
+                      </>
+                    )}
+                    {conditions.hatch_data.local_hatch_info && (
+                      <>
+                        <Text style={styles.conditionDetail}>
+                          <Text style={styles.conditionLabel}>Region:</Text> {conditions.hatch_data.local_hatch_info.region}
+                        </Text>
+                        <Text style={styles.conditionDetail}>
+                          <Text style={styles.conditionLabel}>River System:</Text> {conditions.hatch_data.local_hatch_info.river_system}
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                )}
+
+                {/* Fly suggestions moved to Map tab */}
+                <View style={styles.mapRedirectCard}>
+                  <Text style={styles.mapRedirectTitle}>🎣 Get Fly Suggestions</Text>
+                  <Text style={styles.mapRedirectText}>
+                    Fly suggestions are now available directly on the Map tab! Select a location on the map to get personalized recommendations.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.mapRedirectButton}
+                    onPress={() => router.push('/(tabs)/map')}
+                  >
+                    <Text style={styles.mapRedirectButtonText}>Go to Map Tab</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Recommendations */}
+        {suggestions.length > 0 && (
+          <View style={styles.suggestionsSection}>
+            <Text style={styles.suggestionsTitle}>Recommended Flies</Text>
+            <Text style={styles.suggestionsSubtitle}>Tap any fly for detailed information</Text>
+            {suggestions.map((suggestion, index) => (
+              <FlySuggestionCard
+                key={index}
+                suggestion={suggestion}
+                onPress={handleFlySelection}
+              />
+            ))}
+          </View>
+        )}
         
         {/* Mode Selection */}
         <View style={styles.modeSelectionContainer}>
@@ -811,283 +1412,8 @@ export default function WhatFlyScreen() {
           </View>
         )}
         
-        {/* Advanced Options (Only show in current mode for manual override) */}
-        {mode === 'current' && (
-          <View style={styles.advancedSection}>
-            <Text style={styles.advancedSectionTitle}>Advanced Options</Text>
-            <Text style={styles.advancedSectionSubtitle}>
-              Override auto-detected conditions if needed
-            </Text>
-            
-            {/* Current Location Status */}
-            {isLocationLoading && (
-              <View style={styles.locationStatusContainer}>
-                <ActivityIndicator size="small" color="#ffd33d" />
-                <Text style={styles.locationStatusText}>Detecting your location...</Text>
-              </View>
-            )}
-            
-            {currentLocation && !isLocationLoading && (
-              <View style={styles.locationStatusContainer}>
-                <Text style={styles.locationStatusText}>📍 Current Location: {currentLocation.address}</Text>
-                <Text style={styles.locationCoordsText}>
-                  Coordinates: {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
-                </Text>
-                <TouchableOpacity
-                  style={styles.useCurrentLocationButton}
-                  onPress={refreshLocation}
-                >
-                  <Text style={styles.useCurrentLocationButtonText}>🔄 Refresh Location</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Location Picker */}
-            <LocationPicker
-              onLocationSelect={handleLocationSelect}
-              currentLocation={conditions.location ? {
-                name: conditions.location,
-                latitude: conditions.latitude || 0,
-                longitude: conditions.longitude || 0,
-                address: conditions.location_address,
-              } : undefined}
-            />
-
-        {/* Weather Data Display */}
-        {weatherData && (
-          <View style={styles.weatherContainer}>
-            <Text style={styles.weatherTitle}>🌤️ Current Weather</Text>
-            <View style={styles.weatherGrid}>
-              <View style={styles.weatherItem}>
-                <Text style={styles.weatherLabel}>Temperature</Text>
-                <Text style={styles.weatherValue}>{weatherData.temperature}°F</Text>
-              </View>
-              <View style={styles.weatherItem}>
-                <Text style={styles.weatherLabel}>Conditions</Text>
-                <Text style={styles.weatherValue}>{weatherData.weather_description}</Text>
-              </View>
-              <View style={styles.weatherItem}>
-                <Text style={styles.weatherLabel}>Wind</Text>
-                <Text style={styles.weatherValue}>{weatherData.wind_speed} mph</Text>
-              </View>
-              <View style={styles.weatherItem}>
-                <Text style={styles.weatherLabel}>Humidity</Text>
-                <Text style={styles.weatherValue}>{weatherData.humidity}%</Text>
-              </View>
-            </View>
-            
-            {/* Weather Insights */}
-            {weatherInsights.length > 0 && (
-              <View style={styles.insightsContainer}>
-                <Text style={styles.insightsTitle}>💡 Fishing Insights</Text>
-                {weatherInsights.map((insight, index) => (
-                  <Text key={index} style={styles.insightText}>{insight}</Text>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Loading Weather Indicator */}
-        {isLoadingWeather && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#ffd33d" />
-            <Text style={styles.loadingText}>Loading weather data...</Text>
-          </View>
-        )}
-
-        {/* Auto-Detected Information */}
-        {autoDetectedInfo && (
-          <View style={styles.autoDetectedContainer}>
-            <Text style={styles.autoDetectedTitle}>🎯 Auto-Detected Conditions</Text>
-            <View style={styles.autoDetectedGrid}>
-              <View style={styles.autoDetectedItem}>
-                <Text style={styles.autoDetectedLabel}>Time</Text>
-                <Text style={styles.autoDetectedValue}>{autoDetectedInfo.timeDetected}</Text>
-              </View>
-              <View style={styles.autoDetectedItem}>
-                <Text style={styles.autoDetectedLabel}>Location</Text>
-                <Text style={styles.autoDetectedValue}>{autoDetectedInfo.locationDetected}</Text>
-              </View>
-              <View style={styles.autoDetectedItem}>
-                <Text style={styles.autoDetectedLabel}>Weather</Text>
-                <Text style={styles.autoDetectedValue}>
-                  {autoDetectedInfo.weatherDetected ? '✅ Real-time' : '📊 Estimated'}
-                </Text>
-              </View>
-              <View style={styles.autoDetectedItem}>
-                <Text style={styles.autoDetectedLabel}>Water</Text>
-                <Text style={styles.autoDetectedValue}>
-                  {autoDetectedInfo.waterEstimated ? '🧠 Smart Estimate' : '📝 Manual'}
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Real-Time Water Conditions */}
-        {waterConditions && (
-          <View style={styles.waterConditionsCard}>
-            <Text style={styles.waterConditionsTitle}>🌊 Real-Time Water Conditions</Text>
-            <View style={styles.waterConditionsContent}>
-              <Text style={styles.waterConditionsSummary}>
-                {WaterConditionsService.getWaterConditionSummary(waterConditions)}
-              </Text>
-              
-              {waterConditions.flowRate && (
-                <Text style={styles.waterConditionsDetail}>
-                  Flow Rate: {waterConditions.flowRate} cfs
-                </Text>
-              )}
-              {waterConditions.waterTemperature && (
-                <Text style={styles.waterConditionsDetail}>
-                  Water Temp: {waterConditions.waterTemperature}°F
-                </Text>
-              )}
-              {waterConditions.gaugeHeight && (
-                <Text style={styles.waterConditionsDetail}>
-                  Gauge Height: {waterConditions.gaugeHeight} ft
-                </Text>
-              )}
-              {waterConditions.stationName && (
-                <Text style={styles.waterConditionsDetail}>
-                  Station: {waterConditions.stationName}
-                </Text>
-              )}
-              
-              {/* Water condition rating */}
-              {(() => {
-                const rating = WaterConditionsService.getWaterConditionRating(waterConditions);
-                return (
-                  <View style={styles.waterRatingContainer}>
-                    <Text style={[
-                      styles.waterRatingText,
-                      { color: rating.rating === 'EXCELLENT' ? '#4CAF50' :
-                               rating.rating === 'GOOD' ? '#8BC34A' :
-                               rating.rating === 'FAIR' ? '#FF9800' : '#F44336' }
-                    ]}>
-                      🎣 {rating.description}
-                    </Text>
-                    {rating.factors.map((factor, index) => (
-                      <Text key={index} style={styles.waterFactorText}>• {factor}</Text>
-                    ))}
-                  </View>
-                );
-              })()}
-              
-              <View style={styles.dataSourceContainer}>
-                <Text style={styles.dataSourceText}>
-                  Data Source: {waterConditions.dataSource || 'Unknown'}
-                </Text>
-                {waterConditions.lastUpdated && (
-                  <Text style={styles.dataSourceText}>
-                    Updated: {new Date(waterConditions.lastUpdated).toLocaleString()}
-                  </Text>
-                )}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Smart Suggestions */}
-        {smartSuggestions.length > 0 && (
-          <View style={styles.smartSuggestionsContainer}>
-            <Text style={styles.smartSuggestionsTitle}>💡 Smart Fishing Tips</Text>
-            {smartSuggestions.map((suggestion, index) => (
-              <View key={index} style={styles.smartSuggestionItem}>
-                <Text style={styles.smartSuggestionText}>{suggestion}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-            {/* Water Conditions Input */}
-            <WaterConditionsInput
-              conditions={conditions}
-              onConditionsChange={handleInputChange}
-              showAdvanced={true}
-            />
-
-            {/* Manual Get Suggestions Button */}
-            <TouchableOpacity
-              style={[styles.suggestButton, isLoading && styles.suggestButtonDisabled]}
-              onPress={getSuggestions}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#25292e" size="small" />
-              ) : (
-                <Text style={styles.suggestButtonText}>Get Manual Suggestions</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Clear Form Button */}
-            <TouchableOpacity
-              style={styles.clearButton}
-              onPress={clearForm}
-            >
-              <Text style={styles.clearButtonText}>Clear Form</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
 
-        {/* Suggestions */}
-        {suggestions.length > 0 && (
-          <View style={styles.suggestionsSection}>
-            <Text style={styles.suggestionsTitle}>Recommended Flies</Text>
-            {suggestions.map((suggestion, index) => (
-              <View key={index} style={styles.suggestionCard}>
-                <View style={styles.suggestionHeader}>
-                  <Text style={styles.flyName}>{suggestion.fly.name}</Text>
-                  <View style={styles.confidenceBadge}>
-                    <Text style={styles.confidenceText}>
-                      {Math.round(suggestion.confidence)}%
-                    </Text>
-                  </View>
-                </View>
-                
-                {hasFlyImage(suggestion.fly.name) && (
-                  <View style={styles.flyImageContainer}>
-                    <Image 
-                      source={getFlyImage(suggestion.fly.name)} 
-                      style={styles.flyImage}
-                      contentFit="contain"
-                    />
-                  </View>
-                )}
-                
-                <Text style={styles.flyType}>
-                  {suggestion.fly.type.toUpperCase()} • Size {suggestion.fly.size} • {suggestion.fly.color}
-                </Text>
-                <Text style={styles.flyDescription}>
-                  {suggestion.fly.description || 'No description available'}
-                </Text>
-                <Text style={styles.reasonText}>
-                  💡 {suggestion.reason}
-                </Text>
-                <View style={styles.statsRow}>
-                  <Text style={styles.statText}>
-                    Success Rate: {Math.round(suggestion.fly.success_rate * 100)}%
-                  </Text>
-                  <Text style={styles.statText}>
-                    Uses: {suggestion.fly.total_uses}
-                  </Text>
-                </View>
-                {suggestion.fly.link && (
-                  <TouchableOpacity 
-                    style={styles.learnMoreButton}
-                    onPress={() => handleFlyLink(suggestion.fly.link!)}
-                  >
-                    <Text style={styles.learnMoreText}>
-                      🔗 Learn More & Purchase
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-          </View>
-        )}
 
         {/* Popular Flies Section */}
         <PopularFliesSection />
@@ -1131,6 +1457,16 @@ export default function WhatFlyScreen() {
           setShowUpgradeModal(false);
         }}
         feature="unlimited_fly_suggestions"
+      />
+
+      {/* Fly Detail Modal */}
+      <FlyDetailModal
+        suggestion={selectedFlySuggestion}
+        visible={showFlyDetailModal}
+        onClose={() => {
+          setShowFlyDetailModal(false);
+          setSelectedFlySuggestion(null);
+        }}
       />
 
       {/* Date Picker Modal */}
@@ -1290,6 +1626,57 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: 'center',
   },
+  noLocationCard: {
+    backgroundColor: '#3a3a3a',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffd33d',
+  },
+  noLocationTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffd33d',
+    marginBottom: 8,
+  },
+  noLocationText: {
+    fontSize: 14,
+    color: '#ccc',
+    lineHeight: 20,
+  },
+  mapRedirectCard: {
+    backgroundColor: '#3a3a3a',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  mapRedirectTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 8,
+  },
+  mapRedirectText: {
+    fontSize: 14,
+    color: '#ccc',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  mapRedirectButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  mapRedirectButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
   inputGroup: {
     marginBottom: 15,
   },
@@ -1380,8 +1767,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  suggestionsSubtitle: {
+    fontSize: 14,
+    color: '#aaa',
     marginBottom: 15,
     textAlign: 'center',
+    fontStyle: 'italic',
   },
   suggestionCard: {
     backgroundColor: '#3a3a3a',
@@ -1719,25 +2113,6 @@ const styles = StyleSheet.create({
   modeContent: {
     marginBottom: 20,
   },
-  advancedSection: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#555',
-  },
-  advancedSectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffd33d',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  advancedSectionSubtitle: {
-    fontSize: 14,
-    color: '#ccc',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
   selectDatesButton: {
     backgroundColor: '#007AFF',
     borderRadius: 16,
@@ -1939,40 +2314,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  locationStatusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#3a3a3a',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#555',
-  },
-  locationStatusText: {
-    color: '#ffd33d',
-    fontSize: 14,
-    flex: 1,
-  },
-  locationCoordsText: {
-    color: '#ccc',
-    fontSize: 12,
-    marginTop: 4,
-    fontFamily: 'monospace',
-  },
-  useCurrentLocationButton: {
-    backgroundColor: '#ffd33d',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginLeft: 12,
-  },
-  useCurrentLocationButtonText: {
-    color: '#25292e',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
   waterConditionsCard: {
     backgroundColor: '#2a2a2a',
     borderRadius: 16,
@@ -2028,5 +2369,103 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     fontStyle: 'italic',
+  },
+  locationDataSection: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  locationDataTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffd33d',
+    marginBottom: 12,
+  },
+  locationDataText: {
+    fontSize: 14,
+    color: '#fff',
+    marginBottom: 6,
+    lineHeight: 20,
+  },
+  locationDataLabel: {
+    fontWeight: '600',
+    color: '#ccc',
+  },
+  comprehensiveConditionsSection: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#444',
+    overflow: 'hidden',
+  },
+  comprehensiveConditionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#3a3a3a',
+  },
+  comprehensiveConditionsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffd33d',
+  },
+  comprehensiveConditionsToggle: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  comprehensiveConditionsContent: {
+    padding: 16,
+    gap: 16,
+  },
+  conditionGroup: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#555',
+  },
+  conditionGroupTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 8,
+  },
+  conditionDetail: {
+    fontSize: 13,
+    color: '#fff',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  conditionLabel: {
+    fontWeight: '600',
+    color: '#ccc',
+  },
+  getSuggestionsButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+    opacity: 0.6,
+  },
+  getSuggestionsButtonIcon: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  getSuggestionsButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

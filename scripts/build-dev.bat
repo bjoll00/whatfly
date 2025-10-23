@@ -54,3 +54,5 @@ echo 📱 Install the app on your device when build completes
 echo 🚀 Start development server with: npx expo start --dev-client
 
 
+
+

@@ -1,38 +1,37 @@
 import { APP_CONFIG } from './appConfig';
+import { debugLogger } from './debugLogger';
 import { fliesService } from './supabase';
-import { Fly, FlySuggestion } from './types';
+import { FishingConditions, Fly, FlySuggestion } from './types';
 import { UsageService } from './usageService';
 
 export class FlySuggestionService {
   // Get fly suggestions based on fishing conditions
+  // IMPORTANT: This algorithm ONLY uses official flies from Supabase database
+  // User input, custom flies, or manually added flies are completely ignored
   async getSuggestions(
-    conditions: {
-      location?: string;
-      latitude?: number;
-      longitude?: number;
-      weather_conditions: string;
-      water_clarity: string;
-      water_level: string;
-      water_flow?: string;
-      water_depth?: number;
-      water_ph?: number;
-      dissolved_oxygen?: number;
-      time_of_day: string;
-      time_of_year?: string;
-      water_temperature?: number;
-      wind_speed?: string;
-      wind_direction?: string;
-      air_temperature_range?: string;
-      water_data?: any; // Real-time water conditions from USGS/Utah database
-    },
+    conditions: Partial<FishingConditions>,
     userId?: string
-  ): Promise<{ suggestions: FlySuggestion[]; usageInfo?: any; canPerform: boolean }> {
+  ): Promise<{ suggestions: FlySuggestion[]; usageInfo?: any; canPerform: boolean; error?: string }> {
     try {
-      console.log('Getting suggestions for conditions:', conditions);
       
       // Check usage limits if user is provided and limits are enabled
       let usageInfo: any = null;
       let canPerform = true;
+      
+      // Validate that we have sufficient data from context
+      if (!conditions.location || !conditions.latitude || !conditions.longitude) {
+        console.error('❌ Insufficient location data from context:', {
+          location: conditions.location,
+          latitude: conditions.latitude,
+          longitude: conditions.longitude
+        });
+        return {
+          suggestions: [],
+          usageInfo,
+          canPerform: false,
+          error: 'Insufficient location data. Please select a location on the map first.'
+        };
+      }
       
       if (userId && APP_CONFIG.ENABLE_USAGE_LIMITS) {
         const usageCheck = await UsageService.canPerformAction(userId, 'fly_suggestions');
@@ -44,7 +43,7 @@ export class FlySuggestionService {
         };
         
         if (!canPerform) {
-          console.log('Usage limit exceeded for user:', userId);
+          debugLogger.log('FLY_SERVICE', 'Usage limit exceeded', 'warn');
           return {
             suggestions: [],
             usageInfo,
@@ -53,12 +52,64 @@ export class FlySuggestionService {
         }
       }
       
-      // Get all flies first (since we have sample data)
+      // Get ONLY official flies from Supabase database
+      // This ensures no user-added or custom flies influence recommendations
       const flies = await fliesService.getFlies();
-      console.log('Retrieved flies:', flies.length);
+      
+      if (!flies || flies.length === 0) {
+        console.error('🎣 FlySuggestionService: No flies returned from database');
+        return {
+          suggestions: [],
+          usageInfo,
+          canPerform: false,
+          error: 'No flies found in database. Please check database connection.'
+        };
+      }
+      
+      // Log sample fly data to debug
+      if (flies.length > 0) {
+        console.log('🎣 FlySuggestionService: Sample fly data:', {
+          firstFly: flies[0],
+          flyKeys: Object.keys(flies[0]),
+          totalFlies: flies.length
+        });
+      }
+      
+      // Filter to ensure we only use official database flies
+      // This is a safety check to prevent any custom/user-added flies
+      const officialFlies = flies.filter(fly => {
+        // Basic validation - only require id, name, and type
+        const hasBasicFields = fly.id && fly.name && fly.type;
+        const isNotCustom = !fly.name.toLowerCase().includes('custom') &&
+                           !fly.name.toLowerCase().includes('user') &&
+                           !fly.name.toLowerCase().includes('personal') &&
+                           !fly.name.toLowerCase().includes('my ') &&
+                           !fly.name.toLowerCase().includes('test') &&
+                           !fly.name.toLowerCase().includes('temp');
+        
+        if (!hasBasicFields) {
+          console.log('🎣 FlySuggestionService: Fly missing basic fields:', { id: fly.id, name: fly.name, type: fly.type });
+        }
+        
+        // Add default values for missing fields
+        if (hasBasicFields && isNotCustom) {
+          // Ensure fly has default values for required fields
+          if (!fly.primary_size) fly.primary_size = fly.size || '16'; // Fallback to size field or default
+          if (!fly.color) fly.color = 'Natural'; // Default color
+          if (!fly.success_rate) fly.success_rate = 0; // Default success rate
+          if (!fly.total_uses) fly.total_uses = 0; // Default total uses
+          if (!fly.successful_uses) fly.successful_uses = 0; // Default successful uses
+        }
+        
+        return hasBasicFields && isNotCustom;
+      });
+      
+      console.log(`🎣 FlySuggestionService: Filtered ${officialFlies.length} official flies from ${flies.length} total flies`);
+      
+      console.log(`✅ Using ${officialFlies.length} verified official flies (no user input)`);
 
-      if (flies.length === 0) {
-        console.log('No flies found in database');
+      if (officialFlies.length === 0) {
+        console.log('No official flies found in database');
         return {
           suggestions: [],
           usageInfo,
@@ -66,19 +117,103 @@ export class FlySuggestionService {
         };
       }
 
-      // Score and rank flies
-      const suggestions = flies.map(fly => this.scoreFly(fly, conditions));
-      console.log('Generated suggestions:', suggestions.length);
+      // Score and rank ONLY official flies based purely on fishing conditions
+      // Ensure we have a complete FishingConditions object with defaults
+      const completeConditions: FishingConditions = {
+        date: conditions.date || new Date().toISOString().split('T')[0],
+        location: conditions.location || 'Unknown Location',
+        latitude: conditions.latitude || 0,
+        longitude: conditions.longitude || 0,
+        location_address: conditions.location_address || 'Unknown Address',
+        weather_conditions: conditions.weather_conditions || 'sunny',
+        wind_speed: conditions.wind_speed || 'light',
+        wind_direction: conditions.wind_direction || 'variable',
+        air_temperature_range: conditions.air_temperature_range || 'moderate',
+        water_conditions: conditions.water_conditions || 'calm',
+        water_clarity: conditions.water_clarity || 'clear',
+        water_level: conditions.water_level || 'normal',
+        water_flow: conditions.water_flow || 'moderate',
+        water_temperature_range: conditions.water_temperature_range || 'moderate',
+        water_temperature: conditions.water_temperature,
+        time_of_day: conditions.time_of_day || 'morning',
+        time_of_year: conditions.time_of_year || 'summer',
+        moon_phase: conditions.moon_phase,
+        moon_illumination: conditions.moon_illumination,
+        lunar_feeding_activity: conditions.lunar_feeding_activity,
+        solunar_periods: conditions.solunar_periods,
+        hatch_data: conditions.hatch_data,
+        weather_data: conditions.weather_data,
+        water_data: conditions.water_data,
+        notes: conditions.notes
+      };
+      
+      // Debug: Check if flies have required fields for scoring
+      if (officialFlies.length > 0) {
+        const sampleFly = officialFlies[0];
+        console.log('🎣 FlySuggestionService: Sample fly for scoring:', {
+          id: sampleFly.id,
+          name: sampleFly.name,
+          type: sampleFly.type,
+          hasBestConditions: !!sampleFly.best_conditions,
+          bestConditionsKeys: sampleFly.best_conditions ? Object.keys(sampleFly.best_conditions) : 'none',
+          hasSuccessRate: sampleFly.success_rate !== undefined,
+          successRate: sampleFly.success_rate
+        });
+      }
+      
+      // Debug: Log the conditions being used for scoring
+      console.log('🎣 FlySuggestionService: Conditions being used for scoring:', {
+        location: completeConditions.location,
+        weather_conditions: completeConditions.weather_conditions,
+        water_temperature: completeConditions.water_temperature,
+        water_clarity: completeConditions.water_clarity,
+        water_flow: completeConditions.water_flow,
+        time_of_day: completeConditions.time_of_day,
+        time_of_year: completeConditions.time_of_year,
+        moon_phase: completeConditions.moon_phase,
+        hasRealWeatherData: !!completeConditions.weather_data,
+        hasRealWaterData: !!completeConditions.water_data,
+        realWeatherTemp: completeConditions.weather_data?.temperature,
+        realWaterTemp: completeConditions.water_data?.waterTemperature,
+        realFlowRate: completeConditions.water_data?.flowRate
+      });
+      
+      const suggestions = officialFlies.map(fly => this.scoreFly(fly, completeConditions));
+      console.log('🎣 FlySuggestionService: Generated suggestions:', suggestions.length);
+      
+      // Debug: Check if any suggestions have valid scores
+      if (suggestions.length > 0) {
+        console.log('🎣 FlySuggestionService: Sample suggestion:', {
+          flyName: suggestions[0].fly.name,
+          score: suggestions[0].score,
+          confidence: suggestions[0].confidence,
+          reasons: suggestions[0].reasons?.slice(0, 3) // First 3 reasons
+        });
+      }
       
       // Limit suggestions for free users
       const maxSuggestions = userId && !usageInfo?.usage?.isPremium ? 3 : 5;
       
+      // Apply diversity algorithm to ensure variety in suggestions
+      const diverseSuggestions = this.applyDiversityAlgorithm(suggestions, completeConditions);
+      
       // Sort by confidence (highest first) and return top suggestions
-      const sortedSuggestions = suggestions
+      let sortedSuggestions = diverseSuggestions
         .sort((a, b) => b.confidence - a.confidence)
         .slice(0, maxSuggestions);
       
-      console.log('Final suggestions:', sortedSuggestions);
+      // Fallback: If no valid suggestions, create basic ones from available flies
+      if (sortedSuggestions.length === 0 && officialFlies.length > 0) {
+        console.log('🎣 FlySuggestionService: No valid suggestions, creating fallback suggestions');
+        sortedSuggestions = officialFlies.slice(0, maxSuggestions).map((fly, index) => ({
+          fly,
+          score: 10 - index, // Decreasing score
+          confidence: Math.max(0.1, 0.8 - (index * 0.1)), // Decreasing confidence
+          reasons: ['Available fly option', 'Basic recommendation']
+        }));
+      }
+      
+      console.log('🎣 FlySuggestionService: Final suggestions:', sortedSuggestions.length);
       
       // Increment usage if user is provided and limits are enabled
       if (userId && canPerform && APP_CONFIG.ENABLE_USAGE_LIMITS) {
@@ -92,50 +227,38 @@ export class FlySuggestionService {
       };
     } catch (error) {
       console.error('Error getting fly suggestions:', error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        conditions
+      });
+      
+      // Return a more informative error response
       return {
         suggestions: [],
         usageInfo: null,
-        canPerform: false
+        canPerform: false,
+        error: error instanceof Error ? error.message : 'Failed to get fly suggestions'
       };
     }
   }
 
   // Score a fly based on how well it matches the conditions
-  private scoreFly(fly: Fly, conditions: {
-    location?: string;
-    latitude?: number;
-    longitude?: number;
-    weather_conditions: string;
-    water_clarity: string;
-    water_level: string;
-    water_flow?: string;
-    water_depth?: number;
-    water_ph?: number;
-    dissolved_oxygen?: number;
-    time_of_day: string;
-    time_of_year?: string;
-    water_temperature?: number;
-    wind_speed?: string;
-    wind_direction?: string;
-    air_temperature_range?: string;
-    water_data?: any; // Real-time water conditions
-  }): FlySuggestion {
+  // IMPORTANT: This scoring is based PURELY on fishing conditions and fly characteristics
+  // NO user preferences, custom data, or manual input influences the scoring
+  private scoreFly(fly: Fly, conditions: FishingConditions): FlySuggestion {
     let score = 5; // Very low base score so condition matching dominates
     let reasons: string[] = [];
 
-    // Base score from success rate (minimal impact)
-    const cappedSuccessRate = Math.min(fly.success_rate, 0.7); // Cap at 70%
-    score += cappedSuccessRate * 5; // Very small impact
+    // ========================================
+    // CONDITION-BASED SCORING ONLY
+    // ========================================
+    // All scoring is based on fishing conditions and fly characteristics
+    // NO user preferences, custom data, or manual input influences scoring
+    // This ensures recommendations are purely data-driven
 
-    // Usage-based ranking boost (minimal - condition matching is most important)
-    if (fly.total_uses > 0) {
-      // Tiny boost for popularity
-      const usageBoost = Math.log10(fly.total_uses + 1) * 1; // Minimal impact
-      score += usageBoost;
-      if (fly.total_uses > 50) {
-        reasons.push(`Popular choice (${fly.total_uses} uses)`);
-      }
-    }
+    // REMOVED: Success rate and usage-based scoring to ensure diverse suggestions
+    // All scoring is now based purely on fishing conditions and fly characteristics
 
     // ========================================
     // REAL-TIME WATER CONDITIONS - CRITICAL PRIORITY
@@ -168,60 +291,79 @@ export class FlySuggestionService {
       }
     }
 
-    // Weather conditions match - HIGHEST PRIORITY
+    // Weather conditions match - HIGH PRIORITY (reduced penalties for more flexibility)
     if (fly.best_conditions.weather.includes(conditions.weather_conditions)) {
-      score += 80; // Very high score for weather match
+      score += 60; // High score for weather match
       reasons.push(`Excellent for ${conditions.weather_conditions} weather`);
     } else {
-      score -= 50; // Heavy penalty for weather mismatch
+      score -= 20; // Reduced penalty for weather mismatch
     }
 
     // Time of day match - HIGH PRIORITY with specific pattern bonuses
     const timeOfDayBonus = this.getTimeOfDayBonus(fly, conditions.time_of_day, reasons);
     score += timeOfDayBonus;
     
+    // Debug: Log time of day matching for problematic flies
+    if (fly.name.toLowerCase().includes('chubby')) {
+      console.log(`🕐 Time of day matching for ${fly.name}:`, {
+        flyTimeOfDay: fly.best_conditions.time_of_day,
+        currentTimeOfDay: conditions.time_of_day,
+        includes: fly.best_conditions.time_of_day.includes(conditions.time_of_day)
+      });
+    }
+    
     if (fly.best_conditions.time_of_day.includes(conditions.time_of_day)) {
-      score += 75; // Very high score for time of day match
+      score += 50; // High score for time of day match
       reasons.push(`Perfect for ${conditions.time_of_day} fishing`);
     } else {
-      score -= 45; // Heavy penalty for time of day mismatch
+      score -= 15; // Reduced penalty for time of day mismatch
     }
 
     // Time of year (season) match - HIGH PRIORITY
     if (conditions.time_of_year && fly.best_conditions.time_of_year) {
       if (fly.best_conditions.time_of_year.includes(conditions.time_of_year)) {
-        score += 70; // Very high score for season match
+        score += 45; // High score for season match
         reasons.push(`Excellent for ${conditions.time_of_year} season`);
       } else {
-        score -= 40; // Heavy penalty for season mismatch
+        score -= 15; // Reduced penalty for season mismatch
       }
     }
 
     // Water temperature match - SEASONAL IMPORTANCE
     if (conditions.water_temperature && fly.best_conditions.water_temperature_range) {
       const { min, max } = fly.best_conditions.water_temperature_range;
+      
+      // Debug: Log temperature matching for problematic flies
+      if (fly.name.toLowerCase().includes('chubby')) {
+        console.log(`🌡️ Temperature matching for ${fly.name}:`, {
+          currentTemp: conditions.water_temperature,
+          flyTempRange: { min, max },
+          inRange: conditions.water_temperature >= min && conditions.water_temperature <= max
+        });
+      }
+      
       if (conditions.water_temperature >= min && conditions.water_temperature <= max) {
-        score += 50; // High score for temperature match
+        score += 35; // Good score for temperature match
         reasons.push(`Ideal water temperature for this season`);
       } else {
-        score -= 30; // Heavy penalty for temperature mismatch
+        score -= 10; // Reduced penalty for temperature mismatch
       }
     }
 
     // Water clarity match (secondary importance)
     if (fly.best_conditions.water_clarity.includes(conditions.water_clarity)) {
-      score += 25; // Moderate score for clarity match
+      score += 15; // Moderate score for clarity match
       reasons.push(`Effective in ${conditions.water_clarity} water`);
     } else {
-      score -= 10; // Moderate penalty for clarity mismatch
+      score -= 5; // Reduced penalty for clarity mismatch
     }
 
     // Water level match (secondary importance)
     if (fly.best_conditions.water_level.includes(conditions.water_level)) {
-      score += 25; // Moderate score for level match
+      score += 15; // Moderate score for level match
       reasons.push(`Works well with ${conditions.water_level} water levels`);
     } else {
-      score -= 10; // Moderate penalty for level mismatch
+      score -= 5; // Reduced penalty for level mismatch
     }
 
     // Water flow match (new condition)
@@ -274,21 +416,92 @@ export class FlySuggestionService {
       reasons.push('Perfect weather and season combination');
     }
 
-    // Add small bonus for high success rate (minimal)
-    if (fly.success_rate > 0.8) {
-      score += 2; // Very small bonus
-      reasons.push('High success rate');
+    // REMOVED: All success rate and usage-based bonuses to ensure pure condition-based scoring
+    
+    // Add validation penalties for completely inappropriate conditions
+    let validationPenalty = 0;
+    
+    // Heavy penalty for flies with corrupted time_of_day data (seasonal values instead of time values)
+    const hasSeasonalTimeOfDay = fly.best_conditions.time_of_day.some(t => 
+      ['summer', 'fall', 'spring', 'winter', 'late_summer', 'early_fall'].includes(t)
+    );
+    if (hasSeasonalTimeOfDay) {
+      validationPenalty -= 100; // Heavy penalty for corrupted data
+      reasons.push('⚠️ Invalid time data - seasonal values in time_of_day');
     }
-
-    // Add tiny bonus for well-tested flies (minimal)
-    if (fly.total_uses > 20) {
-      score += 1; // Tiny bonus
-      reasons.push('Well-tested fly');
+    
+    // Heavy penalty for flies that are completely inappropriate for cold conditions
+    if (conditions.water_temperature && conditions.water_temperature < 45) {
+      const flyType = fly.type?.toLowerCase() || '';
+      const flySize = parseInt(fly.primary_size) || 16;
+      
+      // Large dry flies are terrible in very cold water
+      if (flyType === 'dry' && flySize <= 12) {
+        validationPenalty -= 50;
+        reasons.push('❌ Too cold for large dry flies');
+      }
+      
+      // Chubby Chernobyl specifically is terrible in cold water
+      if (fly.name.toLowerCase().includes('chubby') && conditions.water_temperature < 50) {
+        validationPenalty -= 75;
+        reasons.push('❌ Chubby Chernobyl ineffective in cold water');
+      }
+    }
+    
+    score += validationPenalty;
+    
+    // Add small random component to break ties and ensure diversity
+    const randomComponent = (Math.random() - 0.5) * 10; // -5 to +5 points
+    score += randomComponent;
+    
+    // === COMPREHENSIVE DATA SCORING ===
+    
+    // Hatch data scoring
+    if (conditions.hatch_data?.active_hatches) {
+      const hatchScore = this.scoreHatchMatching(fly, conditions.hatch_data, reasons);
+      score += hatchScore;
+    }
+    
+    // Lunar and solunar data scoring
+    if (conditions.moon_phase || conditions.solunar_periods) {
+      const lunarScore = this.scoreLunarInfluence(fly, reasons, conditions.moon_phase, conditions.lunar_feeding_activity);
+      score += lunarScore;
+      
+      const solunarScore = this.scoreSolunarPeriods(fly, conditions.solunar_periods, reasons);
+      score += solunarScore;
+    }
+    
+    // Enhanced weather data scoring
+    if (conditions.weather_data) {
+      const atmosphericScore = this.scoreAtmosphericConditions(fly, conditions.weather_data, reasons);
+      score += atmosphericScore;
+    }
+    
+    // Enhanced water quality scoring
+    if (conditions.water_data) {
+      const waterQualityScore = this.scoreWaterQuality(fly, conditions.water_data, reasons);
+      score += waterQualityScore;
     }
 
     // Ensure minimum confidence
     const confidence = Math.min(100, Math.max(5, score));
 
+    // Debug: Enhanced logging for problematic flies
+    if (fly.name.toLowerCase().includes('chubby')) {
+      console.log(`🎯 CHUBBY CHERNOBYL DEBUG:`, {
+        name: fly.name,
+        finalScore: score,
+        confidence: confidence,
+        reasons: reasons,
+        currentConditions: {
+          timeOfDay: conditions.time_of_day,
+          waterTemp: conditions.water_temperature,
+          weather: conditions.weather_conditions,
+          season: conditions.time_of_year
+        }
+      });
+    }
+    
     console.log(`Fly: ${fly.name}, Score: ${score}, Confidence: ${confidence}, Reasons: ${reasons.join(', ')}`);
 
     return {
@@ -301,7 +514,7 @@ export class FlySuggestionService {
   // Helper methods for new condition matching
   private getFlowMatch(fly: Fly, flow: string): number {
     // Determine fly effectiveness based on water flow
-    const flyType = fly.type.toLowerCase();
+    const flyType = fly.type?.toLowerCase() || '';
     
     switch (flow) {
       case 'still':
@@ -321,7 +534,7 @@ export class FlySuggestionService {
       case 'rapid':
         // Heavy streamers and weighted flies work best in rapid water
         if (flyType === 'streamer') return 1;
-        if (flyType === 'nymph' && fly.size.includes('heavy')) return 1;
+        if (flyType === 'nymph' && fly.primary_size.includes('heavy')) return 1;
         break;
     }
     
@@ -330,7 +543,7 @@ export class FlySuggestionService {
 
   private getDepthMatch(fly: Fly, depth: number): number {
     // Determine fly effectiveness based on water depth
-    const flyType = fly.type.toLowerCase();
+    const flyType = fly.type?.toLowerCase() || '';
     
     if (depth < 3) {
       // Shallow water - dry flies and small nymphs work well
@@ -348,7 +561,7 @@ export class FlySuggestionService {
 
   private getWindMatch(fly: Fly, windSpeed: string): number {
     // Determine fly effectiveness based on wind conditions
-    const flyType = fly.type.toLowerCase();
+    const flyType = fly.type?.toLowerCase() || '';
     
     switch (windSpeed) {
       case 'none':
@@ -362,7 +575,7 @@ export class FlySuggestionService {
       case 'strong':
       case 'very_strong':
         // Strong winds - only heavy flies work well
-        if (flyType === 'streamer' || (flyType === 'nymph' && fly.size.includes('heavy'))) return 1;
+        if (flyType === 'streamer' || (flyType === 'nymph' && fly.primary_size.includes('heavy'))) return 1;
         break;
     }
     
@@ -371,7 +584,7 @@ export class FlySuggestionService {
 
   private getAirTempMatch(fly: Fly, airTemp: string): number {
     // Determine fly effectiveness based on air temperature
-    const flyType = fly.type.toLowerCase();
+    const flyType = fly.type?.toLowerCase() || '';
     
     switch (airTemp) {
       case 'very_cold':
@@ -394,6 +607,8 @@ export class FlySuggestionService {
   }
 
   // Learn from fishing results to improve suggestions
+  // IMPORTANT: This only updates official flies in the database
+  // User input or custom flies are completely ignored
   async learnFromResult(log: {
     flies_used: string[];
     successful_flies: string[];
@@ -406,14 +621,40 @@ export class FlySuggestionService {
   }): Promise<void> {
     try {
       console.log('Learning from result:', log);
+      console.log('📋 Learning: OFFICIAL DATABASE ONLY - No user input influence');
       
-      // Get all flies to match names to IDs
+      // Get only official flies to match names to IDs
       const allFlies = await fliesService.getFlies();
       console.log('Found flies:', allFlies.length);
       
-      // Update success rates for flies used
+      // Filter to ensure we only update official flies
+      const officialFlies = allFlies.filter(fly => {
+        return fly.id && 
+               fly.name && 
+               fly.type && 
+               fly.primary_size && 
+               fly.color &&
+               fly.best_conditions &&
+               // Filter out any flies that might be user-generated or custom
+               !fly.name.toLowerCase().includes('custom') &&
+               !fly.name.toLowerCase().includes('user') &&
+               !fly.name.toLowerCase().includes('personal') &&
+               !fly.name.toLowerCase().includes('my ') &&
+               !fly.name.toLowerCase().includes('test') &&
+               !fly.name.toLowerCase().includes('temp') &&
+               // Ensure the fly has proper official structure
+               typeof fly.best_conditions === 'object' &&
+               Array.isArray(fly.best_conditions.weather) &&
+               Array.isArray(fly.best_conditions.time_of_day) &&
+               Array.isArray(fly.best_conditions.water_clarity) &&
+               Array.isArray(fly.best_conditions.water_level);
+      });
+      
+      console.log(`✅ Using ${officialFlies.length} verified official flies for learning`);
+      
+      // Update success rates for flies used (only official flies)
       for (const flyName of log.flies_used) {
-        const fly = allFlies.find(f => f.name === flyName);
+        const fly = officialFlies.find(f => f.name === flyName);
         console.log(`Looking for fly: ${flyName}, found:`, fly ? 'YES' : 'NO');
         
         if (fly) {
@@ -479,14 +720,14 @@ export class FlySuggestionService {
    */
   private scoreFlowRate(fly: Fly, flowRate: number, reasons: string[]): number {
     let score = 0;
-    const flyType = fly.type.toLowerCase();
+    const flyType = fly.type?.toLowerCase() || '';
     
     // Very low flow (< 30 cfs) - Still water tactics
     if (flowRate < 30) {
       if (flyType === 'dry' || flyType === 'terrestrial') {
         score += 40;
         reasons.push(`💧 Perfect for low flow (${flowRate} cfs) - fish looking up`);
-      } else if (flyType === 'nymph' && parseInt(fly.size) >= 18) {
+      } else if (flyType === 'nymph' && parseInt(fly.primary_size) >= 18) {
         score += 35;
         reasons.push(`💧 Small nymphs work great in low flow (${flowRate} cfs)`);
       } else {
@@ -515,7 +756,7 @@ export class FlySuggestionService {
       if (flyType === 'streamer') {
         score += 60;
         reasons.push(`💧 High flow perfect for streamers (${flowRate} cfs)`);
-      } else if (flyType === 'nymph' && parseInt(fly.size) <= 14) {
+      } else if (flyType === 'nymph' && parseInt(fly.primary_size) <= 14) {
         score += 45;
         reasons.push(`💧 Large nymphs effective in high flow (${flowRate} cfs)`);
       } else {
@@ -524,10 +765,10 @@ export class FlySuggestionService {
     }
     // Very high flow (> 300 cfs) - Big flies only
     else {
-      if (flyType === 'streamer' && parseInt(fly.size) <= 6) {
+      if (flyType === 'streamer' && parseInt(fly.primary_size) <= 6) {
         score += 70;
         reasons.push(`💧 Very high flow demands large streamers (${flowRate} cfs)`);
-      } else if (flyType === 'nymph' && parseInt(fly.size) <= 10) {
+      } else if (flyType === 'nymph' && parseInt(fly.primary_size) <= 10) {
         score += 40;
         reasons.push(`💧 Heavy nymphs for high flow (${flowRate} cfs)`);
       } else {
@@ -544,14 +785,16 @@ export class FlySuggestionService {
    */
   private scoreWaterTemp(fly: Fly, waterTemp: number, timeOfYear: string | undefined, reasons: string[]): number {
     let score = 0;
-    const flyType = fly.type.toLowerCase();
+    const flyType = fly.type?.toLowerCase() || '';
+    
+    // Removed detailed logging to reduce console noise
     
     // Very cold water (< 35°F) - Midges and small nymphs
     if (waterTemp < 35) {
-      if (flyType === 'nymph' && parseInt(fly.size) >= 18) {
+      if (flyType === 'nymph' && parseInt(fly.primary_size) >= 18) {
         score += 60;
         reasons.push(`❄️ Ice cold water (${waterTemp}°F) - tiny nymphs essential`);
-      } else if (fly.name.toLowerCase().includes('midge')) {
+      } else if (fly.name?.toLowerCase().includes('midge')) {
         score += 70;
         reasons.push(`❄️ Midge perfect for ${waterTemp}°F water`);
       } else {
@@ -564,7 +807,7 @@ export class FlySuggestionService {
       if (flyType === 'nymph') {
         score += 55;
         reasons.push(`🌡️ Cold water (${waterTemp}°F) - nymphs dominating`);
-      } else if (flyType === 'streamer' && fly.name.toLowerCase().includes('bugger')) {
+      } else if (flyType === 'streamer' && fly.name?.toLowerCase().includes('bugger')) {
         score += 40;
         reasons.push(`🌡️ Slow retrieves work at ${waterTemp}°F`);
       } else {
@@ -577,7 +820,7 @@ export class FlySuggestionService {
       reasons.push(`🌡️ Prime temperature (${waterTemp}°F) - fish active`);
       
       // BWO hatch bonus
-      if (fly.name.toLowerCase().includes('blue wing') || fly.name.toLowerCase().includes('bwo')) {
+      if (fly.name?.toLowerCase().includes('blue wing') || fly.name?.toLowerCase().includes('bwo')) {
         score += 30;
         reasons.push(`🦋 BWO hatch likely at ${waterTemp}°F`);
       }
@@ -588,7 +831,7 @@ export class FlySuggestionService {
       reasons.push(`🌡️ Perfect temperature (${waterTemp}°F) - fish feeding aggressively`);
       
       // Caddis and PMD bonus
-      if (fly.name.toLowerCase().includes('caddis') || fly.name.toLowerCase().includes('pmd')) {
+      if (fly.name?.toLowerCase().includes('caddis') || fly.name?.toLowerCase().includes('pmd')) {
         score += 35;
         reasons.push(`🦋 Excellent hatch conditions at ${waterTemp}°F`);
       }
@@ -617,7 +860,7 @@ export class FlySuggestionService {
       reasons.push(`⚠️ Water too warm (${waterTemp}°F) - fish less active`);
       
       // Early morning/late evening dry flies still work
-      if (flyType === 'dry' && fly.size && parseInt(fly.size) >= 16) {
+      if (flyType === 'dry' && fly.primary_size && parseInt(fly.primary_size) >= 16) {
         score += 30;
         reasons.push(`🌅 Small dries work early/late despite ${waterTemp}°F`);
       }
@@ -631,11 +874,11 @@ export class FlySuggestionService {
    */
   private scoreGaugeHeight(fly: Fly, gaugeHeight: number, reasons: string[]): number {
     let score = 0;
-    const flyType = fly.type.toLowerCase();
+    const flyType = fly.type?.toLowerCase() || '';
     
     // Very low (< 1.5 ft) - Fish spooky
     if (gaugeHeight < 1.5) {
-      if (flyType === 'dry' && parseInt(fly.size) >= 18) {
+      if (flyType === 'dry' && parseInt(fly.primary_size) >= 18) {
         score += 30;
         reasons.push(`📏 Low water (${gaugeHeight}ft) - small presentations`);
       } else {
@@ -675,9 +918,9 @@ export class FlySuggestionService {
    */
   private getTimeOfDayBonus(fly: Fly, timeOfDay: string, reasons: string[]): number {
     let score = 0;
-    const flyType = fly.type.toLowerCase();
-    const flyName = fly.name.toLowerCase();
-    const flySize = parseInt(fly.size) || 16;
+    const flyType = fly.type?.toLowerCase() || '';
+    const flyName = fly.name?.toLowerCase() || '';
+    const flySize = parseInt(fly.primary_size) || 16;
     
     switch (timeOfDay) {
       case 'dawn':
@@ -812,7 +1055,7 @@ export class FlySuggestionService {
         } else if (flyType === 'streamer' && flySize <= 6) {
           score += 65;
           reasons.push(`🌙 Large dark streamers for night hunting`);
-        } else if (flyName.includes('bugger') && (fly.color.toLowerCase().includes('black') || fly.color.toLowerCase().includes('dark'))) {
+        } else if (flyName.includes('bugger') && (fly.color?.toLowerCase().includes('black') || fly.color?.toLowerCase().includes('dark'))) {
           score += 55;
           reasons.push(`🌙 Dark woolly buggers work at night`);
         } else if (flyName.includes('leech')) {
@@ -829,6 +1072,166 @@ export class FlySuggestionService {
           reasons.push(`⚠️ Night fishing demands big, dark flies`);
         }
         break;
+    }
+    
+    return score;
+  }
+
+  // === COMPREHENSIVE DATA SCORING METHODS ===
+  
+  /**
+   * Score fly based on active hatch matching
+   */
+  private scoreHatchMatching(fly: Fly, hatchData: any, reasons: string[]): number {
+    if (!hatchData || !hatchData.active_hatches || hatchData.active_hatches.length === 0) {
+      return 0;
+    }
+    
+    let score = 0;
+    
+    for (const activeHatch of hatchData.active_hatches) {
+      const flyName = fly.name?.toLowerCase() || '';
+      const flyPattern = fly.pattern_name?.toLowerCase() || '';
+      const hatchName = activeHatch.insect?.toLowerCase() || '';
+      
+      if (flyName.includes(hatchName) || hatchName.includes(flyName) ||
+          flyPattern.includes(hatchName) || hatchName.includes(flyPattern)) {
+        
+        let bonus = 15;
+        if (activeHatch.intensity === 'heavy') bonus += 10;
+        else if (activeHatch.intensity === 'moderate') bonus += 5;
+        
+        if (fly.primary_size === activeHatch.size) bonus += 5;
+        
+        score += bonus;
+        reasons.push(`🎣 Matches active ${activeHatch.intensity} ${activeHatch.insect} hatch`);
+      }
+    }
+    
+    return score;
+  }
+  
+  /**
+   * Score fly based on lunar phase influence
+   */
+  private scoreLunarInfluence(fly: Fly, reasons: string[], moonPhase?: string, feedingActivity?: string): number {
+    if (!moonPhase || !feedingActivity) return 0;
+    
+    let score = 0;
+    
+    if (feedingActivity === 'very_high') {
+      score += 8;
+      reasons.push('🌕 Very high lunar feeding activity');
+    } else if (feedingActivity === 'high') {
+      score += 5;
+      reasons.push('🌙 High lunar feeding activity');
+    }
+    
+    if (moonPhase === 'full' || moonPhase === 'new') {
+      score += 3;
+      reasons.push(`🌕 ${moonPhase} moon phase`);
+      
+      if (fly.type === 'dry') {
+        score += 2;
+        reasons.push('🌕 Dry fly bonus for full moon');
+      }
+    }
+    
+    return score;
+  }
+  
+  /**
+   * Score fly based on solunar periods
+   */
+  private scoreSolunarPeriods(fly: Fly, solunarPeriods: any, reasons: string[]): number {
+    if (!solunarPeriods) return 0;
+    
+    let score = 0;
+    
+    if (solunarPeriods.current_period?.active) {
+      const periodType = solunarPeriods.current_period.type;
+      const remaining = solunarPeriods.current_period.remaining || 0;
+      
+      if (periodType === 'major') {
+        score += 12;
+        reasons.push(`🎯 In major solunar period (${Math.round(remaining)} min remaining)`);
+      } else if (periodType === 'minor') {
+        score += 6;
+        reasons.push(`🎯 In minor solunar period (${Math.round(remaining)} min remaining)`);
+      }
+    }
+    
+    return score;
+  }
+  
+  /**
+   * Score fly based on atmospheric conditions
+   */
+  private scoreAtmosphericConditions(fly: Fly, weatherData: any, reasons: string[]): number {
+    if (!weatherData) return 0;
+    
+    let score = 0;
+    
+    if (weatherData.precipitation?.type === 'rain') {
+      if (weatherData.precipitation.probability > 50) {
+        if (fly.type === 'dry' || fly.type === 'emerger') {
+          score += 6;
+          reasons.push('🌧️ Rain triggers insect activity');
+        }
+      }
+    }
+    
+    if (weatherData.pressure) {
+      if (weatherData.pressure < 1000) {
+        score += 4;
+        reasons.push('📉 Low pressure increases fish activity');
+      } else if (weatherData.pressure > 1020) {
+        if (fly.type === 'nymph' || fly.type === 'imitation') {
+          score += 3;
+          reasons.push('📈 High pressure - precise imitations work better');
+        }
+      }
+    }
+    
+    return score;
+  }
+  
+  /**
+   * Score fly based on water quality indicators
+   */
+  private scoreWaterQuality(fly: Fly, waterData: any, reasons: string[]): number {
+    if (!waterData) return 0;
+    
+    let score = 0;
+    
+    if (waterData.dissolvedOxygen) {
+      if (waterData.dissolvedOxygen > 8) {
+        if (fly.type === 'dry' || fly.type === 'streamer') {
+          score += 4;
+          reasons.push('💨 High oxygen levels favor active flies');
+        }
+      } else if (waterData.dissolvedOxygen < 5) {
+        if (fly.type === 'nymph') {
+          score += 3;
+          reasons.push('💨 Low oxygen - slow presentations work better');
+        }
+      }
+    }
+    
+    if (waterData.turbidity) {
+      if (waterData.turbidity > 30) {
+        if (fly.color && (fly.color.toLowerCase().includes('bright') || 
+                         fly.color.toLowerCase().includes('chartreuse'))) {
+          score += 3;
+          reasons.push('🌊 Murky water - bright fly visibility');
+        }
+      } else if (waterData.turbidity < 5) {
+        if (fly.color && (fly.color.toLowerCase().includes('natural') ||
+                         fly.color.toLowerCase().includes('olive'))) {
+          score += 3;
+          reasons.push('🌊 Clear water - natural fly colors');
+        }
+      }
     }
     
     return score;
@@ -854,6 +1257,57 @@ export class FlySuggestionService {
       console.error('Error getting trending flies:', error);
       return [];
     }
+  }
+  
+  /**
+   * Apply diversity algorithm to ensure variety in fly suggestions
+   */
+  private applyDiversityAlgorithm(suggestions: FlySuggestion[], conditions: FishingConditions): FlySuggestion[] {
+    const diverseSuggestions: FlySuggestion[] = [];
+    const usedTypes = new Set<string>();
+    const usedSizes = new Set<string>();
+    
+    // First pass: Add top fly from each type (dry, nymph, streamer, etc.)
+    const typeGroups = new Map<string, FlySuggestion[]>();
+    
+    suggestions.forEach(suggestion => {
+      const type = suggestion.fly.type;
+      if (!typeGroups.has(type)) {
+        typeGroups.set(type, []);
+      }
+      typeGroups.get(type)!.push(suggestion);
+    });
+    
+    // Add the best fly from each type
+    typeGroups.forEach((flies, type) => {
+      const bestFly = flies.sort((a, b) => b.confidence - a.confidence)[0];
+      if (bestFly && !usedTypes.has(type)) {
+        diverseSuggestions.push(bestFly);
+        usedTypes.add(type);
+        usedSizes.add(bestFly.fly.primary_size);
+      }
+    });
+    
+    // Second pass: Fill remaining slots with diverse options
+    const remaining = suggestions.filter(s => !diverseSuggestions.includes(s));
+    const targetCount = Math.min(8, suggestions.length); // Aim for 8 diverse suggestions
+    
+    for (const suggestion of remaining) {
+      if (diverseSuggestions.length >= targetCount) break;
+      
+      // Prefer flies with different sizes and types
+      const hasDifferentSize = !usedSizes.has(suggestion.fly.primary_size);
+      const hasDifferentType = !usedTypes.has(suggestion.fly.type);
+      
+      if (hasDifferentSize || hasDifferentType || diverseSuggestions.length < 5) {
+        diverseSuggestions.push(suggestion);
+        usedTypes.add(suggestion.fly.type);
+        usedSizes.add(suggestion.fly.primary_size);
+      }
+    }
+    
+    console.log(`🎯 Applied diversity algorithm: ${diverseSuggestions.length} diverse suggestions from ${suggestions.length} total`);
+    return diverseSuggestions;
   }
 }
 

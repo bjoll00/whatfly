@@ -82,6 +82,127 @@ export class WeatherService {
     }
   }
 
+  /**
+   * Get comprehensive weather data including detailed information
+   */
+  async getComprehensiveWeatherData(latitude: number, longitude: number): Promise<{
+    current: WeatherData;
+    forecast: WeatherData[];
+    detailed: {
+      humidity?: number;
+      pressure?: number;
+      visibility?: number;
+      uv_index?: number;
+      cloud_cover?: number;
+      precipitation?: {
+        current: number;
+        probability: number;
+        type: 'none' | 'rain' | 'snow' | 'sleet' | 'hail';
+      };
+    };
+  }> {
+    try {
+      if (!this.apiKey || this.apiKey === 'YOUR_ACTUAL_API_KEY' || this.apiKey === 'YOUR_OPENWEATHER_API_KEY') {
+        console.warn('Weather API key not configured. Using mock comprehensive data.');
+        const mockCurrent = this.getMockWeatherData();
+        const mockForecast = this.getMockForecastData(5);
+        return {
+          current: mockCurrent,
+          forecast: mockForecast,
+          detailed: {
+            humidity: 65,
+            pressure: 1013,
+            visibility: 10,
+            uv_index: 6,
+            cloud_cover: 30,
+            precipitation: {
+              current: 0,
+              probability: 20,
+              type: 'none'
+            }
+          }
+        };
+      }
+
+      // Fetch current weather with detailed information
+      const currentResponse = await fetch(
+        `${this.baseUrl}/weather?lat=${latitude}&lon=${longitude}&appid=${this.apiKey}&units=imperial`
+      );
+
+      if (!currentResponse.ok) {
+        throw new Error(`Weather API error: ${currentResponse.status}`);
+      }
+
+      const currentData = await currentResponse.json();
+      const current = this.parseWeatherData(currentData);
+
+      // Fetch 5-day forecast
+      const forecastResponse = await fetch(
+        `${this.baseUrl}/forecast?lat=${latitude}&lon=${longitude}&appid=${this.apiKey}&units=imperial`
+      );
+
+      if (!forecastResponse.ok) {
+        throw new Error(`Forecast API error: ${forecastResponse.status}`);
+      }
+
+      const forecastData = await forecastResponse.json();
+      const forecast = this.parseForecastData(forecastData);
+
+      // Extract detailed information
+      const detailed = {
+        humidity: currentData.main?.humidity,
+        pressure: currentData.main?.pressure,
+        visibility: currentData.visibility ? currentData.visibility / 1609.34 : undefined, // Convert meters to miles
+        uv_index: currentData.uvi,
+        cloud_cover: currentData.clouds?.all,
+        precipitation: {
+          current: currentData.rain?.['1h'] || currentData.snow?.['1h'] || 0,
+          probability: Math.round((currentData.pop || 0) * 100),
+          type: this.getPrecipitationType(currentData.weather?.[0]?.main, currentData.weather?.[0]?.description)
+        }
+      };
+
+      return {
+        current,
+        forecast,
+        detailed
+      };
+
+    } catch (error) {
+      console.error('Error fetching comprehensive weather data:', error);
+      // Return mock data as fallback
+      const mockCurrent = this.getMockWeatherData();
+      const mockForecast = this.getMockForecastData(5);
+      return {
+        current: mockCurrent,
+        forecast: mockForecast,
+        detailed: {
+          humidity: 65,
+          pressure: 1013,
+          visibility: 10,
+          uv_index: 6,
+          cloud_cover: 30,
+          precipitation: {
+            current: 0,
+            probability: 20,
+            type: 'none'
+          }
+        }
+      };
+    }
+  }
+
+  private getPrecipitationType(main?: string, description?: string): 'none' | 'rain' | 'snow' | 'sleet' | 'hail' {
+    if (!main || !description) return 'none';
+    
+    const desc = description.toLowerCase();
+    if (desc.includes('snow')) return 'snow';
+    if (desc.includes('sleet')) return 'sleet';
+    if (desc.includes('hail')) return 'hail';
+    if (desc.includes('rain') || main === 'Rain') return 'rain';
+    return 'none';
+  }
+
   private parseWeatherData(data: any): WeatherData {
     return {
       temperature: Math.round(data.main.temp),
@@ -90,8 +211,8 @@ export class WeatherService {
       pressure: data.main.pressure,
       wind_speed: data.wind?.speed || 0,
       wind_direction: data.wind?.deg || 0,
-      weather_condition: data.weather[0].main.toLowerCase(),
-      weather_description: data.weather[0].description,
+      weather_condition: data.weather[0]?.main?.toLowerCase() || 'sunny',
+      weather_description: data.weather[0]?.description || '',
       cloudiness: data.clouds?.all || 0,
       visibility: data.visibility ? data.visibility / 1000 : 10, // Convert to km
       uv_index: data.uvi,
@@ -100,10 +221,18 @@ export class WeatherService {
     };
   }
 
+  private parseForecastData(data: any): WeatherData[] {
+    if (!data.list || !Array.isArray(data.list)) {
+      return [];
+    }
+    
+    return data.list.map((item: any) => this.parseWeatherData(item));
+  }
+
   // Convert weather data to fishing-friendly conditions
   convertToFishingConditions(weatherData: WeatherData): WeatherConditions {
     return {
-      weather_conditions: this.mapWeatherCondition(weatherData.weather_condition, weatherData.cloudiness),
+      weather_conditions: this.mapWeatherCondition(weatherData.weather_condition, weatherData.cloudiness || 0),
       wind_speed: this.mapWindSpeed(weatherData.wind_speed),
       wind_direction: this.mapWindDirection(weatherData.wind_direction),
       air_temperature_range: this.mapTemperatureRange(weatherData.temperature),
@@ -112,7 +241,10 @@ export class WeatherService {
     };
   }
 
-  private mapWeatherCondition(condition: string, cloudiness: number): WeatherConditions['weather_conditions'] {
+  private mapWeatherCondition(condition: string | undefined, cloudiness: number): WeatherConditions['weather_conditions'] {
+    if (!condition) {
+      return 'sunny'; // Default to sunny if no condition provided
+    }
     const conditionLower = condition.toLowerCase();
     
     if (conditionLower.includes('thunderstorm') || conditionLower.includes('storm')) {

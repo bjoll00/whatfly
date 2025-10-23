@@ -1,4 +1,5 @@
 // Auto-detection service for one-click fly suggestions
+import { LunarService } from './lunarService';
 import { FishingConditions, WeatherData } from './types';
 import { weatherService } from './weatherService';
 
@@ -152,6 +153,10 @@ export class AutoDetectionService {
       dateTimeInfo.time_of_day
     );
     
+    // Get lunar data
+    const lunarData = LunarService.getMoonPhase(new Date());
+    const solunarData = LunarService.getSolunarPeriods(new Date(), latitude || 40.7608, longitude || -111.8910);
+    
     // Build complete conditions object
     const conditions: Partial<FishingConditions> = {
       // Location
@@ -180,6 +185,29 @@ export class AutoDetectionService {
       air_temperature_range: weatherData ? 
         weatherService.convertToFishingConditions(weatherData).air_temperature_range : 
         'moderate',
+      
+      // Lunar conditions
+      moon_phase: lunarData.phase,
+      moon_illumination: lunarData.illumination,
+      lunar_feeding_activity: lunarData.feedingActivity,
+      solunar_periods: {
+        major_periods: solunarData.major.map(period => ({
+          start: period.start.toISOString(),
+          end: period.end.toISOString(),
+          duration: period.end.getTime() - period.start.getTime(),
+          peak: new Date((period.start.getTime() + period.end.getTime()) / 2).toISOString()
+        })),
+        minor_periods: solunarData.minor.map(period => ({
+          start: period.start.toISOString(),
+          end: period.end.toISOString(),
+          duration: period.end.getTime() - period.start.getTime(),
+          peak: new Date((period.start.getTime() + period.end.getTime()) / 2).toISOString()
+        })),
+        sunrise: new Date().toISOString(), // Placeholder - would need actual sunrise calculation
+        sunset: new Date().toISOString(), // Placeholder - would need actual sunset calculation
+        moonrise: new Date().toISOString(), // Placeholder - would need actual moonrise calculation
+        moonset: new Date().toISOString() // Placeholder - would need actual moonset calculation
+      },
     };
     
     return {
@@ -243,6 +271,8 @@ export class AutoDetectionService {
 }
 
 export const autoDetectionService = new AutoDetectionService();
+
+
 
 
 

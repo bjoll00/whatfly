@@ -56,7 +56,7 @@ export default function PopularFliesSection({ onFlySelect }: PopularFliesSection
       <View style={styles.flyInfo}>
         <Text style={styles.flyName}>{item.name}</Text>
         <Text style={styles.flyDetails}>
-          {item.type} • {item.size} • {item.color}
+          {item.type} • {item.primary_size} • {item.color}
         </Text>
         <View style={styles.statsRow}>
           <Text style={styles.statText}>

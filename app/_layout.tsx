@@ -2,6 +2,7 @@ import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Linking } from 'react-native';
 import { AuthProvider } from '../lib/AuthContext';
+import { FishingProvider } from '../lib/FishingContext';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -37,13 +38,15 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <Stack>
-        <Stack.Screen name="auth" options={{ headerShown: false }} />
-        <Stack.Screen name="debug" options={{ title: 'Debug' }} />
-        <Stack.Screen name="admin-feedback" options={{ title: 'Admin - Feedback Management' }} />
-        <Stack.Screen name="test-feedback-permissions" options={{ title: 'Test Feedback Permissions' }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack>
+      <FishingProvider>
+        <Stack>
+          <Stack.Screen name="auth" options={{ headerShown: false }} />
+          <Stack.Screen name="debug" options={{ title: 'Debug' }} />
+          <Stack.Screen name="admin-feedback" options={{ title: 'Admin - Feedback Management' }} />
+          <Stack.Screen name="test-feedback-permissions" options={{ title: 'Test Feedback Permissions' }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        </Stack>
+      </FishingProvider>
     </AuthProvider>
   );
 }

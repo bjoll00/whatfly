@@ -83,7 +83,7 @@ export default function FlySelector({ onFlySelect, selectedFlies, placeholder = 
       <View style={styles.flyInfo}>
         <Text style={styles.flyName}>{item.name}</Text>
         <Text style={styles.flyDetails}>
-          {item.type} • {item.size} • {item.color}
+          {item.type} • {item.primary_size} • {item.color}
         </Text>
         {item.description && (
           <Text style={styles.flyDescription} numberOfLines={2}>
