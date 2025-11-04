@@ -186,6 +186,22 @@ export class AutoDetectionService {
         weatherService.convertToFishingConditions(weatherData).air_temperature_range : 
         'moderate',
       
+      // CRITICAL FIX: Include full weather_data object for real-time scoring
+      weather_data: weatherData ? {
+        temperature: weatherData.temperature,
+        humidity: weatherData.humidity,
+        pressure: weatherData.pressure,
+        visibility: weatherData.visibility,
+        uv_index: weatherData.uv_index,
+        cloud_cover: weatherData.cloudiness,
+        precipitation: {
+          current: 0,
+          probability: 0,
+          type: weatherData.weather_condition.includes('rain') ? 'rain' : 
+                weatherData.weather_condition.includes('snow') ? 'snow' : 'none'
+        }
+      } : undefined,
+      
       // Lunar conditions
       moon_phase: lunarData.phase,
       moon_illumination: lunarData.illumination,

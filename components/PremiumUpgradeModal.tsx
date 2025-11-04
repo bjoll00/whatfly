@@ -13,7 +13,6 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
-import { StripeService } from '../lib/stripeService';
 
 interface PremiumUpgradeModalProps {
   visible: boolean;
@@ -105,19 +104,12 @@ export default function PremiumUpgradeModal({
     setIsProcessing(true);
     
     try {
-      const { success, error } = await StripeService.createSubscription(user.id, selectedPlan);
-      
-      if (success) {
-        // The user will be redirected to Stripe Checkout
-        // The webhook will handle updating their premium status
-        onUpgrade(selectedPlan);
-      } else {
-        Alert.alert(
-          'Upgrade Failed',
-          error || 'Failed to start upgrade process. Please try again.',
-          [{ text: 'OK' }]
-        );
-      }
+      // Premium features are currently not available
+      Alert.alert(
+        'Coming Soon',
+        'Premium features are coming soon! Stay tuned for updates.',
+        [{ text: 'OK', onPress: () => onClose() }]
+      );
     } catch (error) {
       console.error('Upgrade error:', error);
       Alert.alert(

@@ -1,5 +1,6 @@
 // Weather service for getting weather conditions at specific locations
-// Using OpenWeatherMap API (free tier available)
+// Now uses secure backend API instead of calling external APIs directly
+import { API_ENDPOINTS, apiRequest } from './apiConfig';
 
 interface WeatherData {
   temperature: number;
@@ -27,58 +28,95 @@ interface WeatherConditions {
 }
 
 export class WeatherService {
-  private apiKey: string;
-  private baseUrl = 'https://api.openweathermap.org/data/2.5';
-
-  constructor() {
-    // Your OpenWeatherMap API key
-    this.apiKey = 'b64cf952d33ef1f30245776704e18fed';
-  }
+  /**
+   * Get current weather for a location
+   * Calls secure backend API instead of external API directly
+   */
 
   async getWeatherForLocation(latitude: number, longitude: number): Promise<WeatherData | null> {
     try {
-      if (!this.apiKey || this.apiKey === 'YOUR_ACTUAL_API_KEY' || this.apiKey === 'YOUR_OPENWEATHER_API_KEY') {
-        console.warn('Weather API key not configured. Using mock data.');
-        return this.getMockWeatherData();
-      }
+      console.log(`🌤️ Fetching weather via backend API for: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+      
+      // Call our secure backend API
+      const data = await apiRequest<{
+        temperature: number;
+        feels_like: number;
+        humidity: number;
+        pressure: number;
+        wind_speed: number;
+        wind_direction: number;
+        weather_condition: string;
+        weather_description: string;
+        cloudiness: number;
+        visibility: string | null;
+        uv_index?: number;
+        sunrise?: string;
+        sunset?: string;
+      }>(API_ENDPOINTS.weather.current(latitude, longitude));
 
-      const response = await fetch(
-        `${this.baseUrl}/weather?lat=${latitude}&lon=${longitude}&appid=${this.apiKey}&units=imperial`
-      );
+      // Convert backend response to WeatherData format
+      const weatherData: WeatherData = {
+        temperature: data.temperature,
+        feels_like: data.feels_like,
+        humidity: data.humidity,
+        pressure: data.pressure,
+        wind_speed: data.wind_speed,
+        wind_direction: data.wind_direction,
+        weather_condition: data.weather_condition,
+        weather_description: data.weather_description,
+        cloudiness: data.cloudiness,
+        visibility: data.visibility ? parseFloat(data.visibility) : 0,
+        uv_index: data.uv_index,
+        sunrise: data.sunrise,
+        sunset: data.sunset,
+      };
 
-      if (!response.ok) {
-        throw new Error(`Weather API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return this.parseWeatherData(data);
+      console.log(`✅ Weather fetched: ${weatherData.temperature}°F, ${weatherData.weather_condition}`);
+      return weatherData;
     } catch (error) {
-      console.error('Error fetching weather data:', error);
-      // Return mock data as fallback
-      return this.getMockWeatherData();
+      console.error('❌ Error fetching weather data:', error);
+      return null;
     }
   }
 
   async getWeatherForecast(latitude: number, longitude: number, days: number = 5): Promise<WeatherData[]> {
     try {
-      if (!this.apiKey || this.apiKey === 'YOUR_ACTUAL_API_KEY' || this.apiKey === 'YOUR_OPENWEATHER_API_KEY') {
-        console.warn('Weather API key not configured. Using mock forecast data.');
-        return this.getMockForecastData(days);
-      }
+      console.log(`🌤️ Fetching ${days}-day forecast via backend API`);
+      
+      // Call our secure backend API
+      const response = await apiRequest<{
+        forecast: Array<{
+          temperature: number;
+          feels_like: number;
+          humidity: number;
+          pressure: number;
+          wind_speed: number;
+          wind_direction: number;
+          weather_condition: string;
+          weather_description: string;
+          cloudiness: number;
+          datetime: string;
+          precipitation: number;
+        }>;
+      }>(API_ENDPOINTS.weather.forecast(latitude, longitude, days));
 
-      const response = await fetch(
-        `${this.baseUrl}/forecast?lat=${latitude}&lon=${longitude}&appid=${this.apiKey}&units=imperial`
-      );
-
-      if (!response.ok) {
-        throw new Error(`Weather forecast API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.list.slice(0, days * 8).map((item: any) => this.parseWeatherData(item));
+      // Convert backend response to WeatherData array
+      return response.forecast.map((item) => ({
+        temperature: item.temperature,
+        feels_like: item.feels_like,
+        humidity: item.humidity,
+        pressure: item.pressure,
+        wind_speed: item.wind_speed,
+        wind_direction: item.wind_direction,
+        weather_condition: item.weather_condition,
+        weather_description: item.weather_description,
+        cloudiness: item.cloudiness,
+        visibility: 0, // Forecast doesn't include visibility
+      }));
+      
     } catch (error) {
       console.error('Error fetching weather forecast:', error);
-      return this.getMockForecastData(days);
+      return [];
     }
   }
 
@@ -102,93 +140,39 @@ export class WeatherService {
     };
   }> {
     try {
-      if (!this.apiKey || this.apiKey === 'YOUR_ACTUAL_API_KEY' || this.apiKey === 'YOUR_OPENWEATHER_API_KEY') {
-        console.warn('Weather API key not configured. Using mock comprehensive data.');
-        const mockCurrent = this.getMockWeatherData();
-        const mockForecast = this.getMockForecastData(5);
-        return {
-          current: mockCurrent,
-          forecast: mockForecast,
-          detailed: {
-            humidity: 65,
-            pressure: 1013,
-            visibility: 10,
-            uv_index: 6,
-            cloud_cover: 30,
-            precipitation: {
-              current: 0,
-              probability: 20,
-              type: 'none'
-            }
-          }
-        };
+      // Fetch current weather and forecast using backend API
+      const [currentData, forecastData] = await Promise.all([
+        this.getWeatherForLocation(latitude, longitude),
+        this.getWeatherForecast(latitude, longitude, 5)
+      ]);
+
+      if (!currentData) {
+        throw new Error('Failed to fetch current weather');
       }
 
-      // Fetch current weather with detailed information
-      const currentResponse = await fetch(
-        `${this.baseUrl}/weather?lat=${latitude}&lon=${longitude}&appid=${this.apiKey}&units=imperial`
-      );
-
-      if (!currentResponse.ok) {
-        throw new Error(`Weather API error: ${currentResponse.status}`);
-      }
-
-      const currentData = await currentResponse.json();
-      const current = this.parseWeatherData(currentData);
-
-      // Fetch 5-day forecast
-      const forecastResponse = await fetch(
-        `${this.baseUrl}/forecast?lat=${latitude}&lon=${longitude}&appid=${this.apiKey}&units=imperial`
-      );
-
-      if (!forecastResponse.ok) {
-        throw new Error(`Forecast API error: ${forecastResponse.status}`);
-      }
-
-      const forecastData = await forecastResponse.json();
-      const forecast = this.parseForecastData(forecastData);
-
-      // Extract detailed information
+      // Extract detailed information from current weather
       const detailed = {
-        humidity: currentData.main?.humidity,
-        pressure: currentData.main?.pressure,
-        visibility: currentData.visibility ? currentData.visibility / 1609.34 : undefined, // Convert meters to miles
-        uv_index: currentData.uvi,
-        cloud_cover: currentData.clouds?.all,
+        humidity: currentData.humidity,
+        pressure: currentData.pressure,
+        visibility: currentData.visibility ? currentData.visibility / 1.60934 : undefined,
+        uv_index: currentData.uv_index,
+        cloud_cover: currentData.cloudiness,
         precipitation: {
-          current: currentData.rain?.['1h'] || currentData.snow?.['1h'] || 0,
-          probability: Math.round((currentData.pop || 0) * 100),
-          type: this.getPrecipitationType(currentData.weather?.[0]?.main, currentData.weather?.[0]?.description)
+          current: 0, // Not available from current endpoint
+          probability: 0,
+          type: this.getPrecipitationType(currentData.weather_condition, currentData.weather_description) as 'none' | 'rain' | 'snow' | 'sleet' | 'hail'
         }
       };
 
       return {
-        current,
-        forecast,
+        current: currentData,
+        forecast: forecastData,
         detailed
       };
 
     } catch (error) {
       console.error('Error fetching comprehensive weather data:', error);
-      // Return mock data as fallback
-      const mockCurrent = this.getMockWeatherData();
-      const mockForecast = this.getMockForecastData(5);
-      return {
-        current: mockCurrent,
-        forecast: mockForecast,
-        detailed: {
-          humidity: 65,
-          pressure: 1013,
-          visibility: 10,
-          uv_index: 6,
-          cloud_cover: 30,
-          precipitation: {
-            current: 0,
-            probability: 20,
-            type: 'none'
-          }
-        }
-      };
+      throw error;
     }
   }
 

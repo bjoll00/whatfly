@@ -1,4 +1,3 @@
-import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs, router } from 'expo-router';
 import React, { useState } from 'react';
@@ -139,14 +138,6 @@ export default function TabLayout() {
         }}
         >
 
-        <Tabs.Screen name="whatfly/index" options={{ title: 'What Fly', tabBarIcon: ({ color, focused }) => (
-            <FontAwesome6 name={focused ? "mosquito" : "mosquito"} size={24} color={color} />
-        ),
-    }}/>
-        <Tabs.Screen name="catchlog" options={{ title: 'Catch Log', tabBarIcon: ({ color, focused }) => (
-                <Ionicons name={focused ?'fish-sharp' : 'fish-outline'} color={color} size={24} />
-            ),
-        }} />
         <Tabs.Screen name="map" options={{ title: 'Map', tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'map' : 'map-outline'} color={color} size={24} />
         ),

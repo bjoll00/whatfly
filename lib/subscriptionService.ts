@@ -7,7 +7,6 @@ export interface SubscriptionPlan {
   price: number;
   interval: 'month' | 'year';
   features: string[];
-  stripePriceId: string;
 }
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
@@ -22,7 +21,6 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       '50 catch logs per month',
       'Export catch data'
     ],
-    stripePriceId: 'price_basic_monthly'
   },
   {
     id: 'pro',
@@ -38,7 +36,6 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       'Community features',
       'Priority support'
     ],
-    stripePriceId: 'price_pro_monthly'
   },
   {
     id: 'guide',
@@ -52,8 +49,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       'Expert guide tips',
       'Advanced analytics',
       'Personal fishing insights'
-    ],
-    stripePriceId: 'price_guide_monthly'
+    ]
   }
 ];
 
@@ -64,7 +60,6 @@ export interface UserSubscription {
   status: 'active' | 'canceled' | 'past_due' | 'incomplete';
   currentPeriodStart: Date;
   currentPeriodEnd: Date;
-  stripeSubscriptionId?: string;
 }
 
 export class SubscriptionService {
@@ -75,14 +70,13 @@ export class SubscriptionService {
   }
 
   static async createSubscription(userId: string, planId: string): Promise<{ error?: string }> {
-    // TODO: Implement Stripe subscription creation
-    // This would create a subscription in Stripe and store it in your database
-    return {};
+    // Premium features are not currently available
+    return { error: 'Premium features are coming soon' };
   }
 
   static async cancelSubscription(subscriptionId: string): Promise<{ error?: string }> {
-    // TODO: Implement Stripe subscription cancellation
-    return {};
+    // Premium features are not currently available
+    return { error: 'Premium features are coming soon' };
   }
 
   static async updateSubscription(subscriptionId: string, newPlanId: string): Promise<{ error?: string }> {

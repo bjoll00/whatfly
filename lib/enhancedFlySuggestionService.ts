@@ -25,6 +25,30 @@ export class EnhancedFlySuggestionService {
         timeOfDay: conditions.time_of_day,
         timeOfYear: conditions.time_of_year
       });
+      
+      // CRITICAL: Log real-time data availability for debugging
+      if (conditions.weather_data) {
+        console.log('🌤️ Real-time weather data available:', {
+          temperature: conditions.weather_data.temperature,
+          humidity: conditions.weather_data.humidity,
+          pressure: conditions.weather_data.pressure,
+          cloudCover: conditions.weather_data.cloud_cover
+        });
+      } else {
+        console.warn('⚠️ No real-time weather_data in conditions - suggestions will use basic weather fields only');
+      }
+      
+      if (conditions.water_data) {
+        console.log('🌊 Real-time water data available:', {
+          flowRate: conditions.water_data.flowRate,
+          waterTemperature: conditions.water_data.waterTemperature,
+          gaugeHeight: conditions.water_data.gaugeHeight,
+          dataSource: conditions.water_data.dataSource,
+          dataQuality: conditions.water_data.dataQuality
+        });
+      } else {
+        console.warn('⚠️ No real-time water_data in conditions - suggestions will use basic water fields only');
+      }
       console.log('📋 Algorithm: OFFICIAL DATABASE ONLY - Using global context data');
       
       // Check usage limits if user is provided and limits are enabled

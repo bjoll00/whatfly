@@ -1,4 +1,5 @@
 import { Coordinates } from './types';
+import { API_ENDPOINTS, apiRequest } from './apiConfig';
 
   /**
    * Water conditions data structure
@@ -36,10 +37,35 @@ export class WaterConditionsService {
   
   /**
    * Get water conditions for a specific location
+   * Now uses secure backend API instead of calling external APIs directly
    */
   static async getWaterConditions(coordinates: Coordinates): Promise<WaterConditions | null> {
     try {
-      console.log('🌊 Fetching water conditions for:', coordinates);
+      console.log('🌊 Fetching water conditions via backend API for:', coordinates);
+      
+      // Call our secure backend API
+      const data = await apiRequest<WaterConditions>(API_ENDPOINTS.waterConditions.current(coordinates.latitude, coordinates.longitude));
+      
+      // If backend returns null or empty data, return null
+      if (!data || (!data.flowRate && !data.waterTemperature && !data.gaugeHeight)) {
+        return null;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('❌ Error fetching water conditions:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Legacy method - kept for backward compatibility but now calls backend
+   * This method is deprecated, use getWaterConditions instead
+   * @deprecated
+   */
+  private static async getWaterConditionsLegacy(coordinates: Coordinates): Promise<WaterConditions | null> {
+    try {
+      console.log('🌊 Fetching water conditions (legacy method) for:', coordinates);
       
       // First, try to find nearby USGS stations
       const nearbyStations = await this.findNearbyUSGSStations(coordinates);
@@ -54,26 +80,34 @@ export class WaterConditionsService {
         const waterData = await this.fetchUSGSData(closestStation.site_code);
         
         if (waterData) {
-          console.log('✅ Successfully fetched real-time water data:', waterData);
-          return {
+          const result = {
             ...waterData,
             stationId: closestStation.site_code,
             stationName: closestStation.station_nm,
-            dataSource: 'USGS',
+            dataSource: 'USGS' as const,
             lastUpdated: new Date().toISOString(),
+            dataQuality: 'GOOD' as const,
+            isActive: true
           };
+          
+          console.log('✅ Successfully fetched real-time water data:', {
+            flowRate: result.flowRate,
+            waterTemperature: result.waterTemperature,
+            gaugeHeight: result.gaugeHeight,
+            stationName: result.stationName,
+            dataSource: result.dataSource
+          });
+          
+          return result;
         } else {
-          console.log('⚠️ Failed to fetch data from closest station, using fallback');
+          console.warn('⚠️ Failed to fetch data from closest station');
         }
       } else {
-        console.log('📍 No nearby USGS stations found, using estimated conditions');
+        console.log('📍 No nearby USGS stations found');
       }
       
-      // Fallback to estimated conditions based on location and weather
-      const estimatedConditions = await this.getEstimatedWaterConditions(coordinates);
-      console.log('🧠 Using estimated water conditions:', estimatedConditions);
-      
-      return estimatedConditions;
+      // No data available
+      return null;
       
     } catch (error) {
       console.error('❌ Error fetching water conditions:', error);

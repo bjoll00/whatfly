@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_CONFIG } from './config';
-import { Feedback, FishingLog, Fly } from './types';
+import { Feedback, Fly } from './types';
 
 const supabaseUrl = SUPABASE_CONFIG.url;
 const supabaseAnonKey = SUPABASE_CONFIG.anonKey;
@@ -29,103 +29,9 @@ export async function getCurrentUser() {
 
 // Database table names
 export const TABLES = {
-  FISHING_LOGS: 'fishing_logs',
   FLIES: 'flies',
   FEEDBACK: 'feedback',
 } as const;
-
-// Fishing Logs Service
-export const fishingLogsService = {
-  // Get all fishing logs for a user
-  async getLogs(userId: string): Promise<FishingLog[]> {
-    const { data, error } = await supabase
-      .from(TABLES.FISHING_LOGS)
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return data || [];
-  },
-
-  // Create a new fishing log
-  async createLog(log: Omit<FishingLog, 'id' | 'created_at' | 'updated_at'>): Promise<FishingLog> {
-    const { data, error } = await supabase
-      .from(TABLES.FISHING_LOGS)
-      .insert([log])
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  },
-
-  // Update a fishing log
-  async updateLog(id: string, updates: Partial<FishingLog>): Promise<FishingLog> {
-    const { data, error } = await supabase
-      .from(TABLES.FISHING_LOGS)
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  },
-
-  // Delete a fishing log
-  async deleteLog(id: string, userId?: string): Promise<void> {
-    console.log('Deleting fishing log with ID:', id, 'for user:', userId);
-    
-    try {
-      // First, let's check if the log exists and belongs to the user
-      const { data: existingLog, error: fetchError } = await supabase
-        .from(TABLES.FISHING_LOGS)
-        .select('id, user_id')
-        .eq('id', id)
-        .single();
-
-      if (fetchError) {
-        console.error('Error fetching log to delete:', fetchError);
-        throw new Error(`Log not found: ${fetchError.message}`);
-      }
-
-      if (!existingLog) {
-        throw new Error('Log not found');
-      }
-
-      console.log('Found log to delete:', existingLog);
-
-      // Try RLS approach first
-      let { error } = await supabase
-        .from(TABLES.FISHING_LOGS)
-        .delete()
-        .eq('id', id);
-
-      // If RLS fails and we have userId, try with explicit user_id filter
-      if (error && userId) {
-        console.log('RLS delete failed, trying with user_id filter:', error.message);
-        const { error: userFilterError } = await supabase
-          .from(TABLES.FISHING_LOGS)
-          .delete()
-          .eq('id', id)
-          .eq('user_id', userId);
-        
-        error = userFilterError;
-      }
-
-      if (error) {
-        console.error('Error deleting fishing log:', error);
-        throw new Error(`Delete failed: ${error.message}`);
-      }
-      
-      console.log('Fishing log deleted successfully');
-    } catch (error) {
-      console.error('Delete operation failed:', error);
-      throw error;
-    }
-  },
-};
 
 // Flies Service
 export const fliesService = {

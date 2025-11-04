@@ -3,10 +3,12 @@
 
 export const MAPBOX_CONFIG = {
   // Public access token for client-side map rendering
-  ACCESS_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWdjdndvcmcwOGR6MmpwczAwdzFzbzBnIn0.UnxcMVxCP3aMw7njywx7lA',
+  // IMPORTANT: Set EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN in .env file
+  ACCESS_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '',
   
   // Download token for offline maps (optional)
-  DOWNLOAD_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_DOWNLOAD_TOKEN || 'pk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWdjdndvcmcwOGR6MmpwczAwdzFzbzBnIn0.UnxcMVxCP3aMw7njywx7lA',
+  // IMPORTANT: Set EXPO_PUBLIC_MAPBOX_DOWNLOAD_TOKEN in .env file
+  DOWNLOAD_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_DOWNLOAD_TOKEN || '',
   
   // Map styles optimized for fishing
   STYLES: {
