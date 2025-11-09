@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MAPBOX_CONFIG } from '../lib/mapboxConfig';
 import { fetchFishingData } from '../lib/fetchFishingData';
+import { useCurrentLocation } from '../hooks/useCurrentLocation';
 
 // Import Mapbox for native platforms
 let Mapbox: any = null;
@@ -25,6 +26,9 @@ interface FishingMapProps {
 }
 
 export default function FishingMap({ onLocationSelect }: FishingMapProps) {
+  // Fetch user's current location on mount (for display only, not auto-fetching)
+  const { location: userLocation, isLoading: isLoadingLocation, error: locationError } = useCurrentLocation();
+  
   const [selectedCoordinates, setSelectedCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
   const [fishingData, setFishingData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -93,14 +97,29 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
         logoEnabled={false}
         attributionEnabled={false}
       >
-        <Mapbox.Camera
-          defaultSettings={{
-            centerCoordinate: MAPBOX_CONFIG.DEFAULT_CAMERA.centerCoordinate,
-            zoomLevel: MAPBOX_CONFIG.DEFAULT_CAMERA.zoomLevel,
-          }}
-        />
+                <Mapbox.Camera
+                  defaultSettings={{
+                    centerCoordinate: userLocation 
+                      ? [userLocation.longitude, userLocation.latitude]
+                      : MAPBOX_CONFIG.DEFAULT_CAMERA.centerCoordinate,
+                    zoomLevel: MAPBOX_CONFIG.DEFAULT_CAMERA.zoomLevel,
+                  }}
+                  centerCoordinate={userLocation 
+                    ? [userLocation.longitude, userLocation.latitude]
+                    : MAPBOX_CONFIG.DEFAULT_CAMERA.centerCoordinate}
+                />
 
-        {/* Selected location marker */}
+        {/* User's current location marker (blue dot) */}
+        {userLocation && (
+          <Mapbox.PointAnnotation
+            id="userLocationPoint"
+            coordinate={[userLocation.longitude, userLocation.latitude]}
+          >
+            <View style={styles.userLocationMarker} />
+          </Mapbox.PointAnnotation>
+        )}
+
+        {/* Selected location marker (yellow, for manually selected locations) */}
         {selectedCoordinates && (
           <Mapbox.PointAnnotation
             id="selectedPoint"
@@ -111,7 +130,7 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
         )}
       </Mapbox.MapView>
 
-      {/* Loading Indicator */}
+      {/* Loading Indicator - Only show when fetching fishing data */}
       {isLoading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#ffd33d" />
@@ -132,7 +151,11 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
             </Text>
           </View>
 
-          <View style={styles.dataContent}>
+          <ScrollView 
+            style={styles.dataContent}
+            contentContainerStyle={styles.dataContentContainer}
+            showsVerticalScrollIndicator={true}
+          >
             {/* Coordinates */}
             <View style={styles.dataRow}>
               <Text style={styles.dataLabel}>Coordinates:</Text>
@@ -212,6 +235,19 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
                       </View>
                     )}
 
+                {/* Celestial Data (Moon Phase Only) */}
+                {fishingData.moonPhase !== null && (
+                  <>
+                    <View style={styles.sectionDivider} />
+                    <Text style={styles.sectionTitle}>🌙 Moon Phase</Text>
+
+                    <View style={styles.dataRow}>
+                      <Text style={styles.dataLabel}>Moon Phase:</Text>
+                      <Text style={styles.dataValue}>{fishingData.moonPhase}</Text>
+                    </View>
+                  </>
+                )}
+
                 {/* Water Data */}
                 {(fishingData.streamFlow !== null || fishingData.waterTemperature !== null) && (
                   <>
@@ -227,12 +263,17 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
                       </View>
                     )}
 
-                    {fishingData.waterTemperature !== null && (
+                    {fishingData.waterTemperature !== null ? (
                       <View style={styles.dataRow}>
                         <Text style={styles.dataLabel}>Water Temperature:</Text>
                         <Text style={styles.dataValue}>
-                          {fishingData.waterTemperature.toFixed(1)}°C ({((fishingData.waterTemperature * 9/5) + 32).toFixed(1)}°F)
+                          {((fishingData.waterTemperature * 9/5) + 32).toFixed(1)}°F
                         </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.dataRow}>
+                        <Text style={styles.dataLabel}>Water Temperature:</Text>
+                        <Text style={styles.noDataText}>Not available</Text>
                       </View>
                     )}
 
@@ -258,7 +299,7 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
                 <Text style={styles.noDataText}>No data available</Text>
               </View>
             )}
-          </View>
+          </ScrollView>
         </View>
       )}
     </View>
@@ -280,6 +321,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffd33d',
     borderWidth: 3,
     borderColor: '#fff',
+  },
+  userLocationMarker: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#007AFF', // iOS blue
+    borderWidth: 3,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5, // Android shadow
   },
   loadingOverlay: {
     position: 'absolute',
@@ -330,7 +384,11 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   dataContent: {
+    flex: 1,
+  },
+  dataContentContainer: {
     padding: 16,
+    paddingBottom: 20,
   },
   sectionDivider: {
     height: 1,

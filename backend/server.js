@@ -13,6 +13,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import os from 'os';
 import { weatherRouter } from './routes/weather.js';
 import { waterConditionsRouter } from './routes/waterConditions.js';
 
@@ -67,10 +68,30 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+// Listen on all network interfaces (0.0.0.0) so mobile devices can connect
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 WhatFly Backend API running on port ${PORT}`);
   console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/health`);
+  
+  // Get network IP address for mobile device connection
+  const networkInterfaces = os.networkInterfaces();
+  let networkIP = 'localhost';
+  
+  // Find the first non-internal IPv4 address
+  for (const interfaceName in networkInterfaces) {
+    const addresses = networkInterfaces[interfaceName];
+    for (const address of addresses) {
+      if (address.family === 'IPv4' && !address.internal) {
+        networkIP = address.address;
+        break;
+      }
+    }
+    if (networkIP !== 'localhost') break;
+  }
+  
+  console.log(`📱 Mobile device URL: http://${networkIP}:${PORT}`);
+  console.log(`   Set EXPO_PUBLIC_API_BASE_URL=http://${networkIP}:${PORT} in root .env`);
   
   // Validate required environment variables
   const requiredVars = ['OPENWEATHER_API_KEY'];

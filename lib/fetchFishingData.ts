@@ -33,6 +33,12 @@ interface WeatherMarker {
   streamFlow: number | null; // cubic feet per second (cfs)
   waterTemperature: number | null; // °C
   usgsStationId: string | null;
+  // Celestial data (Solunar)
+  moonPhase: string | null; // Moon phase name
+  major1: string | null; // First major feeding period time
+  major2: string | null; // Second major feeding period time
+  minor1: string | null; // First minor feeding period time
+  minor2: string | null; // Second minor feeding period time
   timestamp: string;
 }
 
@@ -90,7 +96,8 @@ export async function fetchFishingData(
     // --- STEP 2: Conditional Concurrent Fetch ---
     // Create array of API promises
     const promises: Promise<any>[] = [
-      fetchOpenWeatherData(lat, lng, OWM_API_KEY)
+      fetchOpenWeatherData(lat, lng, OWM_API_KEY),
+      fetchSolunarData(lat, lng) // Always fetch Solunar data
     ];
 
     // IF stationId is NOT null, add USGS IV fetch promise
@@ -98,14 +105,49 @@ export async function fetchFishingData(
       promises.push(fetchUSGSInstantaneousValues(stationId));
     }
 
-    console.log('🌐 Fetching weather and water data concurrently...');
+    console.log('🌐 Fetching weather, celestial, and water data concurrently...');
 
     // --- STEP 3: Execution & Processing ---
-    const results = await Promise.all(promises);
+    const results = await Promise.allSettled(promises);
     
     // Extract results based on what was fetched
-    const weatherData = results[0];
-    const usgsData = stationId ? results[1] : null;
+    const weatherResult = results[0];
+    const solunarResult = results[1];
+    const usgsResult = stationId ? results[2] : null;
+
+    // Handle weather data
+    let weatherData: any = null;
+    if (weatherResult.status === 'fulfilled') {
+      weatherData = weatherResult.value;
+    } else {
+      console.warn('⚠️ Weather data fetch failed:', weatherResult.reason);
+      weatherData = {
+        airTemp: 0,
+        windSpeedMph: null,
+        windGustMph: null,
+        windDirectionDeg: null,
+        barometricPressureHpa: null,
+        cloudCoverPercent: null,
+        weatherDescription: 'Weather data unavailable',
+        weatherIcon: '02d',
+        precipitationRainMm: null,
+        precipitationSnowMm: null,
+        sunrise: null,
+        sunset: null,
+      };
+    }
+
+    // Handle solunar data (optional)
+    const solunarData = solunarResult.status === 'fulfilled' ? solunarResult.value : null;
+    if (solunarResult.status === 'rejected') {
+      console.warn('⚠️ Solunar data fetch failed:', solunarResult.reason);
+    }
+
+    // Handle USGS data (optional)
+    const usgsData = usgsResult && usgsResult.status === 'fulfilled' ? usgsResult.value : null;
+    if (usgsResult && usgsResult.status === 'rejected') {
+      console.warn('⚠️ USGS data fetch failed:', usgsResult.reason);
+    }
 
     // --- STEP 4: Process and Combine Data ---
     const marker: WeatherMarker = {
@@ -127,6 +169,12 @@ export async function fetchFishingData(
       streamFlow: usgsData?.flowRate || null,
       waterTemperature: usgsData?.waterTemperature || null,
       usgsStationId: stationId,
+      // Celestial data (from Solunar.org)
+      moonPhase: solunarData?.moonPhase || null,
+      major1: solunarData?.major1 || null,
+      major2: solunarData?.major2 || null,
+      minor1: solunarData?.minor1 || null,
+      minor2: solunarData?.minor2 || null,
       timestamp: new Date().toISOString(),
     };
 
@@ -136,6 +184,8 @@ export async function fetchFishingData(
       pressure: marker.barometricPressureHpa,
       streamFlow: marker.streamFlow,
       waterTemp: marker.waterTemperature,
+      moonPhase: marker.moonPhase || 'N/A',
+      majorPeriods: `${marker.major1 || 'N/A'}, ${marker.major2 || 'N/A'}`,
       stationId: marker.usgsStationId
     });
     
@@ -495,6 +545,103 @@ async function fetchUSGSInstantaneousValues(
 
   } catch (error) {
     console.error('❌ Error fetching USGS IV data:', error);
+    return null;
+  }
+}
+
+/**
+ * STEP 2.3: Fetch Solunar Celestial Data
+ * Fetches solunar data (moon phases and feeding times) from Solunar.org API
+ * Based on Solunar theory for optimal fishing times
+ * 
+ * @param lat - Latitude
+ * @param lng - Longitude
+ * @param date - Date object (defaults to today)
+ * @param timezoneOffset - Timezone offset in hours (e.g., -7 for PST, -5 for EST)
+ * @returns Solunar data with moon phase and feeding periods
+ */
+async function fetchSolunarData(
+  lat: number,
+  lng: number,
+  date: Date = new Date(),
+  timezoneOffset?: number
+): Promise<{
+  moonPhase: string | null;
+  major1: string | null;
+  major2: string | null;
+  minor1: string | null;
+  minor2: string | null;
+} | null> {
+  try {
+    // Calculate timezone offset if not provided
+    let tzOffset = timezoneOffset;
+    if (tzOffset === undefined) {
+      // Get timezone offset in hours (negative for west of UTC)
+      tzOffset = -date.getTimezoneOffset() / 60;
+    }
+
+    // Format date as YYYYMMDD
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}${month}${day}`;
+
+    // Construct Solunar.org API URL
+    // Format: https://api.solunar.org/solunar/latitude,longitude,date,tz
+    const url = `https://api.solunar.org/solunar/${lat},${lng},${dateStr},${tzOffset}`;
+    
+    console.log(`🌙 Fetching Solunar data for: ${lat.toFixed(4)}, ${lng.toFixed(4)} on ${dateStr} (TZ: ${tzOffset})`);
+    console.log(`🔗 Solunar URL: ${url}`);
+
+    // Fetch with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn(`⚠️ Solunar API returned error: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json();
+
+    // Log the full response to see the structure
+    console.log('🔍 Solunar API response:', JSON.stringify(data, null, 2));
+
+    // Parse Solunar data - try multiple possible field name variations
+    // The API response structure may vary, so we check multiple possibilities
+    const moonPhase = data.moonPhase || data.phase || data.moon_phase || data.moonPhaseName || null;
+    
+    // Major periods - could be in different formats
+    const major1 = data.major1 || data.majorPeriod1 || data.major_1 || 
+                   data.major?.start || data.majorPeriods?.[0] || null;
+    const major2 = data.major2 || data.majorPeriod2 || data.major_2 || 
+                   data.major?.end || data.majorPeriods?.[1] || null;
+    
+    // Minor periods
+    const minor1 = data.minor1 || data.minorPeriod1 || data.minor_1 || 
+                   data.minor?.start || data.minorPeriods?.[0] || null;
+    const minor2 = data.minor2 || data.minorPeriod2 || data.minor_2 || 
+                   data.minor?.end || data.minorPeriods?.[1] || null;
+
+    console.log(`✅ Solunar data parsed - Phase: ${moonPhase || 'N/A'}, Major: ${major1 || 'N/A'}/${major2 || 'N/A'}, Minor: ${minor1 || 'N/A'}/${minor2 || 'N/A'}`);
+
+    return {
+      moonPhase,
+      major1,
+      major2,
+      minor1,
+      minor2,
+    };
+
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.warn('⚠️ Solunar API request timed out after 10 seconds');
+    } else {
+      console.error('❌ Error fetching Solunar data:', error);
+    }
     return null;
   }
 }
