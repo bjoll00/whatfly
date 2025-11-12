@@ -1,16 +1,16 @@
-// Supabase Configuration
-// Replace these with your actual Supabase project details
-export const SUPABASE_CONFIG = {
-  url: 'https://aflfbalfpjhznkbwatqf.supabase.co', // e.g., 'https://your-project.supabase.co'
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFmbGZiYWxmcGpoem5rYndhdHFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcyODcxNzcsImV4cCI6MjA3Mjg2MzE3N30.WdnpRNAcfVWBBZ0GpE4JB_kjpfGgEmp55N76zuuI2OY', // Your public anon key
-};
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-// Instructions:
-// 1. Go to your Supabase project dashboard
-// 2. Navigate to Settings → API
-// 3. Copy the Project URL and replace 'YOUR_SUPABASE_URL' above
-// 4. Copy the anon/public key and replace 'YOUR_SUPABASE_ANON_KEY' above
-// 5. Save this file
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error(
+    'Supabase environment variables are not set. Define EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env file.'
+  );
+}
+
+export const SUPABASE_CONFIG = {
+  url: SUPABASE_URL,
+  anonKey: SUPABASE_ANON_KEY,
+};
 
 // Sample flies data for initial database population
 export const SAMPLE_FLIES = [

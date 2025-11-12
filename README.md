@@ -25,6 +25,21 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Configure Supabase credentials
+
+Create a `.env` file in the project root (it is already ignored by git) and provide your Supabase keys:
+
+```
+EXPO_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-public-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+- The two `EXPO_PUBLIC_*` values are required by the Expo app at runtime.
+- `SUPABASE_SERVICE_ROLE_KEY` is only used by server-side utilities/scripts such as `scripts/rebuildFliesForMap.js`. Keep this value private.
+
+> Tip: copy the same placeholders into a local `.env.example` file for teammates to reference without sharing secrets.
+
 ## Get a fresh project
 
 When you're ready, run:
