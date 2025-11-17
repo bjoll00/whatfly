@@ -2,15 +2,36 @@
  * API Configuration
  * 
  * Centralized configuration for backend API endpoints
- * In production, this should point to your deployed backend URL
+ * Automatically detects the correct URL for web/simulator vs physical devices
  */
 
+import { Platform } from 'react-native';
+
+/**
+ * Get the appropriate backend URL based on platform
+ * - Web/Simulator: Uses localhost
+ * - Physical device: Uses network IP from env, or tries localhost first
+ */
+function getApiBaseUrl(): string {
+  // Production URL takes precedence
+  if (process.env.EXPO_PUBLIC_API_BASE_URL) {
+    return process.env.EXPO_PUBLIC_API_BASE_URL;
+  }
+
+  // For web platform, always use localhost
+  if (Platform.OS === 'web') {
+    return 'http://localhost:3001';
+  }
+
+  // For native platforms (iOS/Android), try network IP from env first
+  // If not set, will fallback to localhost (works for simulator)
+  // For physical devices, set EXPO_PUBLIC_API_BASE_URL in .env with your network IP
+  return 'http://localhost:3001';
+}
+
 // Backend API base URL
-// Development: Local backend server
-// Production: Your deployed backend URL (e.g., https://your-backend.vercel.app)
-export const API_BASE_URL = 
-  process.env.EXPO_PUBLIC_API_BASE_URL || 
-  'http://localhost:3001';
+// Automatically uses localhost for web/simulator, network IP for physical devices
+export const API_BASE_URL = getApiBaseUrl();
 
 // API endpoints
 export const API_ENDPOINTS = {
@@ -46,10 +67,11 @@ export async function handleApiError(response: Response): Promise<never> {
 
 /**
  * Helper function to make API requests with error handling
+ * Automatically tries network IP if localhost fails (for physical devices)
  */
 export async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
-  try {
-    const response = await fetch(url, {
+  const tryRequest = async (requestUrl: string): Promise<T> => {
+    const response = await fetch(requestUrl, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -62,7 +84,30 @@ export async function apiRequest<T>(url: string, options?: RequestInit): Promise
     }
 
     return await response.json();
+  };
+
+  try {
+    return await tryRequest(url);
   } catch (error) {
+    // For physical devices, if localhost fails, try network IP from env
+    if (
+      error instanceof TypeError && 
+      error.message.includes('fetch') &&
+      Platform.OS !== 'web' &&
+      url.includes('localhost') &&
+      process.env.EXPO_PUBLIC_API_BASE_URL &&
+      process.env.EXPO_PUBLIC_API_BASE_URL.includes('192.168.')
+    ) {
+      console.log('🔄 localhost failed, trying network IP...');
+      const networkUrl = url.replace('localhost', process.env.EXPO_PUBLIC_API_BASE_URL.replace('http://', '').split(':')[0]);
+      try {
+        return await tryRequest(networkUrl);
+      } catch (networkError) {
+        console.error('🌐 Both localhost and network IP failed');
+        throw networkError;
+      }
+    }
+
     // Handle network errors (connection refused, timeout, etc.)
     if (error instanceof TypeError && error.message.includes('fetch')) {
       const connectionError = new Error(
