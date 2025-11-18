@@ -90,10 +90,14 @@ export default function FlySuggestionsModal({
 
           <View style={styles.flyDetails}>
             <Text style={styles.flyType}>
-              {fly.type.charAt(0).toUpperCase() + fly.type.slice(1)} Fly
+              {fly.insect_category || fly.type?.charAt(0).toUpperCase() + fly.type?.slice(1) || 'Fly'}
             </Text>
             <Text style={styles.flySizeColor}>
-              Size {fly.primary_size} • {fly.color}
+              {fly.sizes_available && fly.sizes_available.length > 0 
+                ? `Sizes ${fly.sizes_available.join(', ')}` 
+                : fly.primary_size 
+                  ? `Size ${fly.primary_size}` 
+                  : 'Size N/A'} • {fly.color}
             </Text>
           </View>
 

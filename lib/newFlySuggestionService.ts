@@ -3,12 +3,16 @@
  * 
  * This is a complete rebuild that properly uses ALL fly data attributes:
  * - ideal_conditions (with actual temperature/flow ranges)
- * - imitated_insect (for hatch matching)
+ * - Normalized columns: insect_category, insect_order, insect_behavior, insect_size_min/max
+ * - hatch_matching (extracted from imitated_insect)
+ * - best_conditions (extracted from imitated_insect)
  * - suggestion_profile (with weights, required fields, boosts)
- * - best_conditions (legacy support)
+ * - sizes_available (array of available sizes)
  * 
  * The algorithm matches real-time conditions against these structures
  * to provide accurate, location-specific fly suggestions.
+ * 
+ * IMPORTANT: Uses normalized columns instead of imitated_insect JSONB for better performance.
  */
 
 import { fliesService } from './supabase';
@@ -19,18 +23,6 @@ interface IdealConditions {
   waterTemperature?: { min: number; max: number };
   streamFlow?: { min: number; max: number };
   weatherDescription?: string[];
-}
-
-interface ImitatedInsect {
-  imitates?: string[];
-  lifeStages?: string[];
-  sizes?: string[];
-  hatchSeasons?: string[];
-  hatchTimes?: string[];
-  waterPreferences?: string[];
-  weatherPreferences?: string[];
-  primarySize?: string;
-  colorPalette?: string[];
 }
 
 interface SuggestionProfile {
@@ -90,6 +82,18 @@ export class NewFlySuggestionService {
         season: conditions.time_of_year,
       });
 
+      // Log sample of normalized data usage
+      const sampleFly = flies.find(f => f.insect_category && f.sizes_available?.length > 0);
+      if (sampleFly) {
+        console.log('📊 Using normalized columns:', {
+          name: sampleFly.name,
+          insect_category: sampleFly.insect_category,
+          sizes_available: sampleFly.sizes_available,
+          has_hatch_matching: !!sampleFly.hatch_matching,
+          has_insect_order: !!sampleFly.insect_order,
+        });
+      }
+
       // Score each fly
       const scoredFlies = flies.map(fly => this.scoreFly(fly, conditions));
 
@@ -130,9 +134,15 @@ export class NewFlySuggestionService {
 
   /**
    * Score a fly based on how well it matches current conditions
+   * 
+   * Uses normalized columns for better performance:
+   * - insect_category instead of type
+   * - sizes_available instead of primary_size
+   * - hatch_matching and best_conditions (extracted from imitated_insect)
+   * - insect_order, insect_behavior, insect_size_min/max
    */
   private scoreFly(
-    fly: Fly & { ideal_conditions?: IdealConditions; imitated_insect?: ImitatedInsect; suggestion_profile?: SuggestionProfile },
+    fly: Fly & { ideal_conditions?: IdealConditions; suggestion_profile?: SuggestionProfile },
     conditions: Partial<FishingConditions>
   ): { fly: Fly; score: number; reasons: string[] } {
     let score = 0;
@@ -255,59 +265,78 @@ export class NewFlySuggestionService {
     }
 
     // ========================================
-    // 3. IMITATED INSECT MATCHING
+    // 3. HATCH MATCHING (from normalized data)
     // ========================================
-    if (fly.imitated_insect) {
-      const insect = fly.imitated_insect;
+    // Use hatch_matching data that was extracted from imitated_insect
+    if (fly.hatch_matching) {
+      const hatch = fly.hatch_matching;
 
-      // Hatch season matching
-      if (insect.hatchSeasons && conditions.time_of_year) {
-        const season = conditions.time_of_year.toLowerCase();
-        const matches = insect.hatchSeasons.some(s => 
-          season.includes(s.toLowerCase()) || s.toLowerCase().includes(season)
-        );
-        
-        if (matches) {
-          score += 30;
-          reasons.push(`Matches ${season} hatch season`);
-        }
+      // Insect order/category matching (using normalized columns)
+      if (fly.insect_order && fly.insect_category) {
+        // Bonus for having detailed insect information
+        score += 5;
       }
 
-      // Hatch time matching
-      if (insect.hatchTimes && conditions.time_of_day) {
-        const timeOfDay = conditions.time_of_day.toLowerCase();
-        const matches = insect.hatchTimes.some(t => 
-          timeOfDay.includes(t.toLowerCase()) || t.toLowerCase().includes(timeOfDay)
-        );
-        
-        if (matches) {
-          score += 25;
-          reasons.push(`Matches ${timeOfDay} hatch time`);
-        }
+      // Life stages matching
+      if (hatch.stages && hatch.stages.length > 0) {
+        // This indicates the fly matches specific insect life stages
+        score += 10;
+        reasons.push(`Matches ${hatch.stages.join(', ')} life stages`);
       }
 
-      // Water preferences matching
-      if (insect.waterPreferences && conditions.water_flow) {
-        const waterFlow = conditions.water_flow.toLowerCase();
-        const matches = insect.waterPreferences.some(w => 
-          waterFlow.includes(w.toLowerCase()) || w.toLowerCase().includes(waterFlow)
-        );
+      // Insect types matching
+      if (hatch.insects && hatch.insects.length > 0) {
+        score += 10;
+        reasons.push(`Imitates ${hatch.insects.join(', ')}`);
+      }
+    }
+
+    // Use insect_category for more accurate type matching
+    // This is more accurate than the generic 'type' column
+    if (fly.insect_category) {
+      const category = fly.insect_category.toLowerCase();
+      
+      // Category-based bonuses based on conditions
+      if (conditions.water_data?.waterTemperature !== undefined) {
+        const waterTemp = conditions.water_data.waterTemperature;
         
-        if (matches) {
-          score += 20;
+        // Nymphs are best in cold water
+        if (category.includes('nymph') && waterTemp < 50) {
+          score += 15;
+          reasons.push('Cold water - nymphs are most effective');
+        }
+        
+        // Dry flies are best in warm water
+        if (category.includes('dry') && waterTemp > 60) {
+          score += 15;
+          reasons.push('Warm water - surface activity likely');
         }
       }
+    }
 
-      // Weather preferences matching
-      if (insect.weatherPreferences && conditions.weather_conditions) {
-        const weather = conditions.weather_conditions.toLowerCase();
-        const matches = insect.weatherPreferences.some(w => 
-          weather.includes(w.toLowerCase()) || w.toLowerCase().includes(weather)
-        );
+    // Use insect_size_min/max for size range matching
+    if (fly.insect_size_min !== undefined && fly.insect_size_max !== undefined) {
+      // This provides more accurate size information than just primary_size
+      if (fly.sizes_available && fly.sizes_available.length > 0) {
+        // Verify sizes_available aligns with size range
+        const sizes = fly.sizes_available.map(s => parseInt(s, 10)).filter(n => !isNaN(n));
+        const minSize = Math.min(...sizes);
+        const maxSize = Math.max(...sizes);
         
-        if (matches) {
-          score += 20;
+        // Bonus if size range matches available sizes
+        if (minSize >= fly.insect_size_min && maxSize <= fly.insect_size_max) {
+          score += 3;
         }
+      }
+    }
+
+    // Use insect_behavior for additional context
+    if (fly.insect_behavior) {
+      // Behavior can indicate fishing technique
+      const behavior = fly.insect_behavior.toLowerCase();
+      if (behavior.includes('drift') && conditions.water_flow === 'moderate') {
+        score += 5;
+        reasons.push('Behavior matches water conditions');
       }
     }
 
@@ -350,36 +379,55 @@ export class NewFlySuggestionService {
     }
 
     // ========================================
-    // 5. FLY TYPE BONUSES
+    // 5. FLY CATEGORY BONUSES (using insect_category)
     // ========================================
-    const flyType = fly.type?.toLowerCase();
+    // Use insect_category instead of type for more accurate matching
+    // Fallback to type if insect_category is not available
+    const flyCategory = (fly.insect_category || fly.type || '').toLowerCase();
     
-    // Real-time flow rate type matching
+    // Real-time flow rate category matching
     if (conditions.water_data?.flowRate !== undefined) {
       const flowRate = conditions.water_data.flowRate;
       
-      if (flowRate < 50 && (flyType === 'dry' || flyType === 'terrestrial')) {
+      if (flowRate < 50 && (flyCategory.includes('dry') || flyCategory.includes('terrestrial'))) {
         score += 20;
         reasons.push('Low flow - perfect for dry flies');
-      } else if (flowRate > 200 && flyType === 'streamer') {
+      } else if (flowRate > 200 && flyCategory.includes('streamer')) {
         score += 25;
         reasons.push('High flow - perfect for streamers');
-      } else if (flowRate >= 75 && flowRate <= 150 && flyType === 'nymph') {
+      } else if (flowRate >= 75 && flowRate <= 150 && flyCategory.includes('nymph')) {
         score += 20;
         reasons.push('Medium flow - excellent for nymphing');
       }
     }
 
-    // Real-time water temp type matching
-    if (conditions.water_data?.waterTemperature !== undefined) {
-      const waterTemp = conditions.water_data.waterTemperature;
+    // Size matching using sizes_available
+    // Check if the fly has appropriate sizes for the conditions
+    if (fly.sizes_available && fly.sizes_available.length > 0) {
+      // Convert sizes to numbers for comparison
+      const sizes = fly.sizes_available.map(s => parseInt(s, 10)).filter(n => !isNaN(n));
       
-      if (waterTemp < 45 && flyType === 'nymph') {
-        score += 15;
-        reasons.push('Cold water - nymphs are most effective');
-      } else if (waterTemp > 65 && (flyType === 'dry' || flyType === 'terrestrial')) {
-        score += 15;
-        reasons.push('Warm water - surface activity likely');
+      if (sizes.length > 0) {
+        // Use the middle size as the recommended size (more accurate than always using "16")
+        const recommendedSize = sizes[Math.floor(sizes.length / 2)];
+        
+        // Bonus for having multiple size options (versatility)
+        if (sizes.length >= 3) {
+          score += 5;
+          reasons.push(`Available in ${sizes.length} sizes (${sizes.join(', ')})`);
+        }
+        
+        // Size-based matching (smaller flies for clearer water, larger for murky)
+        if (conditions.water_clarity) {
+          const clarity = conditions.water_clarity.toLowerCase();
+          if (clarity === 'clear' && recommendedSize <= 18) {
+            score += 5;
+            reasons.push('Small size ideal for clear water');
+          } else if (clarity.includes('murky') && recommendedSize >= 14) {
+            score += 5;
+            reasons.push('Larger size visible in murky water');
+          }
+        }
       }
     }
 

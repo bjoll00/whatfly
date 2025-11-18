@@ -56,7 +56,9 @@ export default function PopularFliesSection({ onFlySelect }: PopularFliesSection
       <View style={styles.flyInfo}>
         <Text style={styles.flyName}>{item.name}</Text>
         <Text style={styles.flyDetails}>
-          {item.type} • {item.primary_size} • {item.color}
+          {item.insect_category || item.type} • {item.sizes_available && item.sizes_available.length > 0 
+            ? item.sizes_available.join(', ') 
+            : item.primary_size || 'N/A'} • {item.color}
         </Text>
         <View style={styles.statsRow}>
           <Text style={styles.statText}>

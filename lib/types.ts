@@ -34,6 +34,13 @@ export interface Fly {
   image?: string; // Path to fly image
   link?: string; // URL to learn more about the fly
   
+  // Insect-specific data (extracted from imitated_insect JSONB)
+  insect_order?: string; // e.g., "Ephemeroptera", "Trichoptera"
+  insect_category?: string; // e.g., "Nymph", "Dun", "Spinner"
+  insect_behavior?: string; // e.g., "Sub-surface drift"
+  insect_size_min?: number; // Minimum size from sizeRange
+  insect_size_max?: number; // Maximum size from sizeRange
+  
   // Enhanced conditions with more granular data
   best_conditions: {
     weather: string[];
