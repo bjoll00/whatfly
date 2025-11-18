@@ -1,8 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MAPBOX_CONFIG } from '../lib/mapboxConfig';
 import { fetchFishingData } from '../lib/fetchFishingData';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
+import { useFishing } from '../lib/FishingContext';
+import { convertMapDataToFishingConditions } from '../lib/mapDataConverter';
+import { useAuth } from '../lib/AuthContext';
+import { flySuggestionService } from '../lib/flySuggestionService';
+import { newFlySuggestionService } from '../lib/newFlySuggestionService';
+import { FlySuggestion } from '../lib/types';
+import FlySuggestionsModal from './FlySuggestionsModal';
 
 // Import Mapbox for native platforms
 let Mapbox: any = null;
@@ -29,9 +36,19 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
   // Fetch user's current location on mount (for display only, not auto-fetching)
   const { location: userLocation, isLoading: isLoadingLocation, error: locationError } = useCurrentLocation();
   
+  // Get FishingContext to store conditions for fly suggestions
+  const { setFishingConditions, clearFishingConditions, fishingConditions } = useFishing();
+  
+  // Get user for usage tracking
+  const { user } = useAuth();
+  
   const [selectedCoordinates, setSelectedCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
   const [fishingData, setFishingData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuggestionsModal, setShowSuggestionsModal] = useState(false);
+  const [suggestions, setSuggestions] = useState<FlySuggestion[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const mapRef = useRef<any>(null);
 
   const handleMapPress = async (event: any) => {
@@ -66,6 +83,20 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
       const data = await fetchFishingData(latitude, longitude);
       if (data) {
         setFishingData(data);
+        
+        // Convert map data to FishingConditions format and store in context
+        // This makes the data available for fly suggestion algorithms
+        const fishingConditions = convertMapDataToFishingConditions(
+          data,
+          `Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
+          latitude,
+          longitude
+        );
+        
+        // Store in FishingContext so fly suggestion services can access it
+        setFishingConditions(fishingConditions);
+        
+        console.log('✅ Map data converted and stored in FishingContext for fly suggestions');
       }
     } catch (error) {
       console.error('Error fetching fishing data:', error);
@@ -77,6 +108,78 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
   const clearSelection = () => {
     setSelectedCoordinates(null);
     setFishingData(null);
+    // Clear fishing conditions from context when selection is cleared
+    clearFishingConditions();
+    // Close suggestions modal if open
+    setShowSuggestionsModal(false);
+    setSuggestions([]);
+    setSuggestionsError(null);
+  };
+
+  const handleGetFlySuggestions = async () => {
+    // Check if we have fishing conditions from context
+    if (!fishingConditions || !fishingConditions.location || !fishingConditions.latitude || !fishingConditions.longitude) {
+      setSuggestionsError('Please wait for location data to load, or select a location on the map.');
+      setShowSuggestionsModal(true);
+      return;
+    }
+
+    setIsLoadingSuggestions(true);
+    setSuggestionsError(null);
+    setShowSuggestionsModal(true);
+
+    try {
+      console.log('🎣 Getting fly suggestions for conditions:', {
+        location: fishingConditions.location,
+        lat: fishingConditions.latitude,
+        lng: fishingConditions.longitude,
+        weather: fishingConditions.weather_conditions,
+        water: fishingConditions.water_conditions,
+      });
+
+      // Use the NEW fly suggestion service that properly uses all fly attributes
+      const result = await newFlySuggestionService.getSuggestions(
+        fishingConditions,
+        user?.id
+      );
+
+      console.log('🎣 Fly suggestions result:', {
+        suggestionsCount: result.suggestions?.length || 0,
+        canPerform: result.canPerform,
+        error: result.error,
+        hasSuggestions: (result.suggestions?.length || 0) > 0,
+        firstSuggestion: result.suggestions?.[0]?.fly?.name || 'none',
+      });
+
+      if (result.error) {
+        console.error('❌ Fly suggestion error:', result.error);
+        setSuggestionsError(result.error);
+        setSuggestions([]);
+      } else if (!result.canPerform) {
+        console.warn('⚠️ Cannot perform fly suggestions:', result);
+        setSuggestionsError('Unable to get suggestions. Please try again.');
+        setSuggestions([]);
+      } else if (!result.suggestions || result.suggestions.length === 0) {
+        console.warn('⚠️ No fly suggestions returned. Possible causes:');
+        console.warn('  - Database might be empty (no flies)');
+        console.warn('  - Conditions might not match any flies');
+        console.warn('  - Service might have encountered an error');
+        setSuggestionsError('No fly suggestions available. The database might be empty or conditions don\'t match any flies.');
+        setSuggestions([]);
+      } else {
+        setSuggestions(result.suggestions);
+        setSuggestionsError(null);
+        console.log(`✅ Got ${result.suggestions.length} fly suggestions`);
+      }
+    } catch (error) {
+      console.error('Error getting fly suggestions:', error);
+      setSuggestionsError(
+        error instanceof Error ? error.message : 'Failed to get fly suggestions. Please try again.'
+      );
+      setSuggestions([]);
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
   };
 
   if (!Mapbox) {
@@ -293,6 +396,23 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
                     <Text style={styles.noDataText}>🌊 No water data available</Text>
                   </>
                 )}
+
+                {/* Get Fly Suggestions Button */}
+                <View style={styles.sectionDivider} />
+                <TouchableOpacity
+                  style={styles.suggestionsButton}
+                  onPress={handleGetFlySuggestions}
+                  disabled={isLoadingSuggestions}
+                >
+                  {isLoadingSuggestions ? (
+                    <ActivityIndicator size="small" color="#25292e" />
+                  ) : (
+                    <>
+                      <Text style={styles.suggestionsButtonIcon}>🎣</Text>
+                      <Text style={styles.suggestionsButtonText}>Get Fly Suggestions</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </>
             ) : !isLoading && (
               <View style={styles.dataRow}>
@@ -302,6 +422,22 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
           </ScrollView>
         </View>
       )}
+
+      {/* Fly Suggestions Modal */}
+      <FlySuggestionsModal
+        visible={showSuggestionsModal}
+        suggestions={suggestions}
+        isLoading={isLoadingSuggestions}
+        error={suggestionsError}
+        onClose={() => {
+          setShowSuggestionsModal(false);
+          setSuggestionsError(null);
+        }}
+        onFlySelect={(suggestion) => {
+          console.log('Fly selected:', suggestion.fly.name);
+          // You can add additional logic here, like showing fly details
+        }}
+      />
     </View>
   );
 }
@@ -433,5 +569,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginTop: 50,
+  },
+  suggestionsButton: {
+    backgroundColor: '#ffd33d',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  suggestionsButtonIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  suggestionsButtonText: {
+    color: '#25292e',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

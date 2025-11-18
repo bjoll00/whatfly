@@ -54,15 +54,29 @@ export class FlySuggestionService {
       
       // Get ONLY official flies from Supabase database
       // This ensures no user-added or custom flies influence recommendations
-      const flies = await fliesService.getFlies();
-      
-      if (!flies || flies.length === 0) {
-        console.error('🎣 FlySuggestionService: No flies returned from database');
+      let flies: Fly[] = [];
+      try {
+        flies = await fliesService.getFlies();
+        console.log(`🎣 FlySuggestionService: Retrieved ${flies.length} flies from database`);
+      } catch (dbError) {
+        console.error('❌ Error fetching flies from database:', dbError);
         return {
           suggestions: [],
           usageInfo,
           canPerform: false,
-          error: 'No flies found in database. Please check database connection.'
+          error: 'Failed to connect to database. Please check your internet connection and try again.'
+        };
+      }
+      
+      if (!flies || flies.length === 0) {
+        console.error('❌ FlySuggestionService: No flies returned from database');
+        console.error('   Database query succeeded but returned empty array');
+        console.error('   This means the flies table is empty');
+        return {
+          suggestions: [],
+          usageInfo,
+          canPerform: false,
+          error: 'No flies found in database. The database appears to be empty. Please run the database population script (scripts/populateDatabase.js).'
         };
       }
       
@@ -109,11 +123,15 @@ export class FlySuggestionService {
       console.log(`✅ Using ${officialFlies.length} verified official flies (no user input)`);
 
       if (officialFlies.length === 0) {
-        console.log('No official flies found in database');
+        console.error('❌ No official flies found in database');
+        console.error('   This means the database is empty or all flies were filtered out');
+        console.error('   Total flies from database:', flies.length);
+        console.error('   Official flies after filtering:', officialFlies.length);
         return {
           suggestions: [],
           usageInfo,
-          canPerform: true
+          canPerform: false,
+          error: 'No flies found in database. Please populate the database with flies first.'
         };
       }
 
@@ -178,16 +196,30 @@ export class FlySuggestionService {
         realFlowRate: completeConditions.water_data?.flowRate
       });
       
+      // CRITICAL: Log if conditions are different from defaults
+      const isUsingDefaults = 
+        completeConditions.weather_conditions === 'sunny' &&
+        completeConditions.water_conditions === 'calm' &&
+        completeConditions.time_of_day === 'morning' &&
+        completeConditions.time_of_year === 'summer';
+      
+      if (isUsingDefaults) {
+        console.warn('⚠️ WARNING: Using default conditions! Real conditions may not be passed correctly.');
+        console.warn('   This means all locations will get the same suggestions.');
+      } else {
+        console.log('✅ Using real conditions (not defaults)');
+      }
+      
       const suggestions = officialFlies.map(fly => this.scoreFly(fly, completeConditions));
       console.log('🎣 FlySuggestionService: Generated suggestions:', suggestions.length);
       
-      // Debug: Check if any suggestions have valid scores
+      // Debug: Log top suggestions BEFORE diversity algorithm
       if (suggestions.length > 0) {
-        console.log('🎣 FlySuggestionService: Sample suggestion:', {
-          flyName: suggestions[0].fly.name,
-          score: suggestions[0].score,
-          confidence: suggestions[0].confidence,
-          reasons: suggestions[0].reasons?.slice(0, 3) // First 3 reasons
+        // Sort by confidence to see top suggestions
+        const sortedByConfidence = [...suggestions].sort((a, b) => b.confidence - a.confidence);
+        console.log('🎣 FlySuggestionService: Top 5 suggestions BEFORE diversity algorithm:');
+        sortedByConfidence.slice(0, 5).forEach((s, i) => {
+          console.log(`  ${i + 1}. ${s.fly.name}: confidence=${s.confidence.toFixed(3)}, reason="${s.reason.substring(0, 50)}..."`);
         });
       }
       
@@ -263,40 +295,74 @@ export class FlySuggestionService {
     // ========================================
     // REAL-TIME WATER CONDITIONS - CRITICAL PRIORITY
     // ========================================
+    // This is the MOST IMPORTANT factor for differentiating locations
     if (conditions.water_data) {
       const waterConditions = conditions.water_data;
       
       // Real-time flow rate analysis (VERY HIGH PRIORITY)
-      if (waterConditions.flowRate !== undefined) {
+      // This should be the PRIMARY differentiator between locations
+      if (waterConditions.flowRate !== undefined && waterConditions.flowRate !== null) {
         const flowScore = this.scoreFlowRate(fly, waterConditions.flowRate, reasons);
         score += flowScore;
+        // Boost real-time flow scoring to make it more impactful
+        score += flowScore * 0.3; // 30% bonus for real-time data
       }
       
       // Real-time water temperature (VERY HIGH PRIORITY)
-      if (waterConditions.waterTemperature !== undefined) {
+      // This should also strongly differentiate locations
+      if (waterConditions.waterTemperature !== undefined && waterConditions.waterTemperature !== null) {
         const tempScore = this.scoreWaterTemp(fly, waterConditions.waterTemperature, conditions.time_of_year, reasons);
         score += tempScore;
+        // Boost real-time temp scoring to make it more impactful
+        score += tempScore * 0.3; // 30% bonus for real-time data
       }
       
       // Gauge height consideration (MEDIUM PRIORITY)
-      if (waterConditions.gaugeHeight !== undefined) {
+      if (waterConditions.gaugeHeight !== undefined && waterConditions.gaugeHeight !== null) {
         const gaugeScore = this.scoreGaugeHeight(fly, waterConditions.gaugeHeight, reasons);
         score += gaugeScore;
       }
       
-      // Data quality bonus
+      // Data quality bonus - bigger bonus for real-time data
       if (waterConditions.dataQuality === 'GOOD') {
-        score += 10;
+        score += 15; // Increased from 10
         reasons.push(`🎯 Real-time data from ${waterConditions.stationName || 'monitoring station'}`);
       }
+    } else {
+      // Penalty if no real-time water data available
+      // This encourages using locations with real-time data
+      score -= 5;
+      reasons.push('⚠️ No real-time water data - using estimated conditions');
     }
 
     // Weather conditions match - HIGH PRIORITY (reduced penalties for more flexibility)
-    if (fly.best_conditions.weather.includes(conditions.weather_conditions)) {
-      score += 60; // High score for weather match
-      reasons.push(`Excellent for ${conditions.weather_conditions} weather`);
+    // IMPORTANT: Make scoring more sensitive to weather differences
+    const weatherMatch = fly.best_conditions.weather.includes(conditions.weather_conditions);
+    if (weatherMatch) {
+      // Base score for match
+      score += 60;
+      
+      // Bonus for specific weather matches (not just generic arrays)
+      const weatherArray = fly.best_conditions.weather;
+      if (weatherArray.length <= 2) {
+        // More specific = higher score
+        score += 20;
+        reasons.push(`Perfect match for ${conditions.weather_conditions} weather`);
+      } else {
+        // Generic match = lower score
+        score += 10;
+        reasons.push(`Good for ${conditions.weather_conditions} weather`);
+      }
     } else {
-      score -= 20; // Reduced penalty for weather mismatch
+      // Penalty for mismatch - more severe if fly has specific conditions
+      const weatherArray = fly.best_conditions.weather;
+      if (weatherArray.length <= 2) {
+        // Specific fly that doesn't match = bigger penalty
+        score -= 30;
+      } else {
+        // Generic fly = smaller penalty
+        score -= 20;
+      }
     }
 
     // Time of day match - HIGH PRIORITY with specific pattern bonuses

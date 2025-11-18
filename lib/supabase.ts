@@ -37,13 +37,36 @@ export const TABLES = {
 export const fliesService = {
   // Get all flies
   async getFlies(): Promise<Fly[]> {
-    const { data, error } = await supabase
-      .from(TABLES.FLIES)
-      .select('*')
-      .order('success_rate', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from(TABLES.FLIES)
+        .select('*')
+        .order('success_rate', { ascending: false });
 
-    if (error) throw error;
-    return data || [];
+      if (error) {
+        console.error('❌ Supabase query error:', error);
+        console.error('   Error code:', error.code);
+        console.error('   Error message:', error.message);
+        console.error('   Error details:', error.details);
+        console.error('   Error hint:', error.hint);
+        
+        // Provide helpful error messages based on error code
+        if (error.code === 'PGRST116' || error.message?.includes('permission denied') || error.message?.includes('RLS')) {
+          throw new Error('Database access denied. Row Level Security (RLS) policies may be blocking access. Check Supabase RLS settings for the flies table.');
+        }
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          throw new Error('Flies table does not exist. Please run database migrations.');
+        }
+        
+        throw error;
+      }
+      
+      console.log(`✅ Supabase query successful: Retrieved ${data?.length || 0} flies`);
+      return data || [];
+    } catch (error) {
+      console.error('❌ Error in fliesService.getFlies():', error);
+      throw error;
+    }
   },
 
   // Get flies by conditions
