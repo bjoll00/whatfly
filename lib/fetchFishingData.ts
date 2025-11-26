@@ -545,7 +545,7 @@ async function fetchUSGSInstantaneousValues(
 
   } catch (error) {
     console.error('❌ Error fetching USGS IV data:', error);
-    return null;
+    return {flowRate: null, waterTemperature: null, };
   }
 }
 

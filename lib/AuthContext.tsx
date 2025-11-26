@@ -56,11 +56,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
     });
     console.log('AuthContext: Sign in response:', { data, error });
-    
-    // The auth state change listener will handle updating the user state
-    // No need to manually set user here as it can cause race conditions
-    setLoading(false);
-    
+
+    if (error) {
+      setLoading(false);
+    }
+
     return { data, error };
   };
 

@@ -47,7 +47,7 @@ export default function FishingDataExample() {
       // Log the results
       console.log('Fishing Data:', {
         location: `[${longitude}, ${latitude}]`,
-        airTemp: `${fishingData.airTemperature}°C`,
+        airTemp: `${fishingData.airTemp}°C`,
         weather: fishingData.weatherDescription,
         streamFlow: fishingData.streamFlow ? `${fishingData.streamFlow} cfs` : 'N/A',
         waterTemp: fishingData.waterTemperature ? `${fishingData.waterTemperature}°C` : 'N/A',
