@@ -23,7 +23,7 @@ export default function ResetPasswordScreen() {
   } else if (user && access_token && refresh_token) {
     // User is authenticated and has tokens - redirect to home
     console.log('ResetPasswordScreen: User is authenticated with tokens, redirecting to home');
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/" />;
   } else if (!access_token || !refresh_token) {
     console.log('ResetPasswordScreen: No tokens provided, redirecting to auth');
     console.log('ResetPasswordScreen: Available params:', Object.keys(useLocalSearchParams()));

@@ -41,7 +41,7 @@ export default function AuthScreen() {
       const timer = setTimeout(() => {
         if (user) {
           console.log('AuthScreen: Auto-redirecting verified user to main app');
-          router.replace('/(tabs)');
+          router.replace('/');
         }
       }, 3000);
       
@@ -53,7 +53,7 @@ export default function AuthScreen() {
   useEffect(() => {
     if (user) {
       console.log('AuthScreen: User is already authenticated, redirecting to main app');
-      router.replace('/(tabs)');
+      router.replace('/');
     }
   }, [user, router]);
 
@@ -85,13 +85,13 @@ export default function AuthScreen() {
     try {
       if (isSignUp) {
         setStatus('Creating account...');
-        const { data, error } = await signUp(email, password);
+        const { error } = await signUp(email, password);
         if (error) {
           console.error('Sign up error:', error);
           setStatus('Sign up failed');
           Alert.alert('Error', error.message);
         } else {
-          console.log('Sign up success:', data);
+          console.log('Sign up success:', );
           setStatus('Account created!');
           setShowVerificationMessage(true);
           // Clear form and switch to sign in mode
@@ -102,13 +102,13 @@ export default function AuthScreen() {
       } else {
         setStatus('Signing in...');
         console.log('Attempting sign in with:', email);
-        const { data, error } = await signIn(email, password);
+        const { error } = await signIn(email, password);
         if (error) {
           console.error('Sign in error:', error);
           setStatus('Sign in failed');
           Alert.alert('Error', error.message);
         } else {
-          console.log('Sign in successful:', data);
+          console.log('Sign in successful:',);
           setStatus('Sign in successful! Redirecting...');
           // The redirect will happen automatically via the user state check above
         }
