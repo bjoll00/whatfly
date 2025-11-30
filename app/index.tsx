@@ -4,13 +4,10 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 
 export default function Index() {
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
 
-  console.log('Index component - user:', user?.id, 'loading:', loading);
-  console.log('Index component - user object:', user);
-
+  // Show loading while auth initializes
   if (loading) {
-    console.log('Index: Still loading...');
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#ffd33d" />
@@ -19,8 +16,7 @@ export default function Index() {
     );
   }
 
-  // Always redirect to tabs - let the tab layout handle guest vs authenticated users
-  console.log('Index: Redirecting to main app');
+  // Always go to map - auth is only required for specific features
   return <Redirect href="/(tabs)/map" />;
 }
 

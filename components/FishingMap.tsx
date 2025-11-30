@@ -1,12 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { MAPBOX_CONFIG } from '../lib/mapboxConfig';
-import { fetchFishingData } from '../lib/fetchFishingData';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
-import { useFishing } from '../lib/FishingContext';
-import { convertMapDataToFishingConditions } from '../lib/mapDataConverter';
 import { useAuth } from '../lib/AuthContext';
-import { flySuggestionService } from '../lib/flySuggestionService';
+import { fetchFishingData } from '../lib/fetchFishingData';
+import { useFishing } from '../lib/FishingContext';
+import { MAPBOX_CONFIG } from '../lib/mapboxConfig';
+import { convertMapDataToFishingConditions } from '../lib/mapDataConverter';
 import { newFlySuggestionService } from '../lib/newFlySuggestionService';
 import { FlySuggestion } from '../lib/types';
 import FlySuggestionsModal from './FlySuggestionsModal';
@@ -498,7 +497,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#ffd33d',
-    maxHeight: '60%',
+    maxHeight: '80%',
   },
   dataHeader: {
     flexDirection: 'row',
@@ -524,7 +523,7 @@ const styles = StyleSheet.create({
   },
   dataContentContainer: {
     padding: 16,
-    paddingBottom: 20,
+    paddingBottom: 30,
   },
   sectionDivider: {
     height: 1,
@@ -577,8 +576,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
-    marginBottom: 8,
+    marginTop: 12,
+    marginBottom: 16,
   },
   suggestionsButtonIcon: {
     fontSize: 20,

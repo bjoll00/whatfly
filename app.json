@@ -26,6 +26,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.whatfly.fishing",
       "buildNumber": "1.0.1",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to take photos of your catches and fishing conditions.",
         "NSPhotoLibraryUsageDescription": "This app accesses your photo library to save and share fishing photos.",
@@ -76,6 +77,8 @@
         }
       ],
       "expo-web-browser",
+      "expo-secure-store",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

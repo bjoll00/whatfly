@@ -1,17 +1,19 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Linking,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 
@@ -22,10 +24,22 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<'google' | 'apple' | null>(null);
   const [status, setStatus] = useState('');
   const [showVerificationMessage, setShowVerificationMessage] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
-  const { user, signIn, signUp, resetPassword, refreshAuth } = useAuth();
+  
+  const { 
+    user, 
+    loading: authLoading,
+    needsUsername,
+    signIn, 
+    signUp, 
+    signInWithGoogle,
+    signInWithApple,
+    refreshAuth 
+  } = useAuth();
+  
   const searchParams = useLocalSearchParams();
 
   // Handle email verification success
@@ -34,42 +48,70 @@ export default function AuthScreen() {
       console.log('AuthScreen: Email verification detected');
       setEmailVerified(true);
       setStatus('Email verified successfully! You can now sign in.');
-      // Refresh auth state to check if user is now authenticated
       refreshAuth();
       
-      // Auto-redirect after 3 seconds if user becomes authenticated
       const timer = setTimeout(() => {
         if (user) {
-          console.log('AuthScreen: Auto-redirecting verified user to main app');
-          router.replace('/');
+          console.log('AuthScreen: Auto-redirecting verified user');
+          if (needsUsername) {
+            router.replace('/username-setup');
+          } else {
+            router.replace('/(tabs)/map');
+          }
         }
       }, 3000);
       
       return () => clearTimeout(timer);
     }
-  }, [searchParams.verified, refreshAuth, user, router]);
+  }, [searchParams.verified, refreshAuth, user, needsUsername]);
 
-  // If user is already authenticated, automatically redirect to main app
+  // Redirect authenticated users (wait for auth loading to complete first)
   useEffect(() => {
-    if (user) {
-      console.log('AuthScreen: User is already authenticated, redirecting to main app');
-      router.replace('/');
+    // Don't redirect while auth is still loading (profile being fetched)
+    if (authLoading) {
+      console.log('AuthScreen: Auth still loading, waiting...');
+      return;
     }
-  }, [user, router]);
+    
+    if (user) {
+      console.log('AuthScreen: User authenticated, needsUsername:', needsUsername);
+      if (needsUsername) {
+        console.log('AuthScreen: User needs username, redirecting to setup');
+        router.replace('/username-setup');
+      } else {
+        console.log('AuthScreen: User has profile, redirecting to app');
+        router.replace('/(tabs)/map');
+      }
+    }
+  }, [user, needsUsername, authLoading]);
 
-  // Show loading screen while redirecting authenticated users
-  if (user) {
+  // Show loading while auth is being processed
+  if (authLoading) {
     return (
       <View style={styles.container}>
-        <View style={styles.content}>
-          <Text style={styles.title}>✅ Welcome back!</Text>
-          <Text style={styles.message}>Redirecting to your fishing dashboard...</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ffd33d" />
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </View>
     );
   }
 
-  const handleAuth = async () => {
+  // Show loading/redirect message for authenticated users
+  if (user) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ffd33d" />
+          <Text style={styles.loadingText}>
+            {needsUsername ? 'Setting up your profile...' : 'Welcome back!'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  const handleEmailAuth = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -82,39 +124,32 @@ export default function AuthScreen() {
 
     setLoading(true);
     setStatus('Processing...');
+    
     try {
       if (isSignUp) {
         setStatus('Creating account...');
         const { error } = await signUp(email, password);
         if (error) {
-          console.error('Sign up error:', error);
           setStatus('Sign up failed');
           Alert.alert('Error', error.message);
         } else {
-          console.log('Sign up success:', );
           setStatus('Account created!');
           setShowVerificationMessage(true);
-          // Clear form and switch to sign in mode
           setIsSignUp(false);
           setEmail('');
           setPassword('');
         }
       } else {
         setStatus('Signing in...');
-        console.log('Attempting sign in with:', email);
         const { error } = await signIn(email, password);
         if (error) {
-          console.error('Sign in error:', error);
           setStatus('Sign in failed');
           Alert.alert('Error', error.message);
         } else {
-          console.log('Sign in successful:',);
-          setStatus('Sign in successful! Redirecting...');
-          // The redirect will happen automatically via the user state check above
+          setStatus('Sign in successful!');
         }
       }
     } catch (error) {
-      console.error('Unexpected error:', error);
       setStatus('Unexpected error');
       Alert.alert('Error', 'An unexpected error occurred');
     } finally {
@@ -122,20 +157,105 @@ export default function AuthScreen() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setSocialLoading('google');
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) {
+        Alert.alert('Error', error.message || 'Failed to sign in with Google');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setSocialLoading('apple');
+    try {
+      const { error } = await signInWithApple();
+      if (error) {
+        Alert.alert('Error', error.message || 'Failed to sign in with Apple');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  const handleSkip = () => {
+    // Just go back to the map - user can use basic features without signing in
+    router.replace('/(tabs)/map');
+  };
 
   return (
     <KeyboardAvoidingView 
       style={styles.container} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header */}
         <View style={styles.header}>
           <Image source={WhatFlyLogo} style={styles.logo} resizeMode="contain" />
           <Text style={styles.subtitle}>
-            {isSignUp ? 'Create your account' : 'Welcome back!'}
+            {isSignUp 
+              ? 'Create an account to save your catches' 
+              : 'Sign in to access your fishing data'
+            }
           </Text>
         </View>
 
+        {/* Social Login Buttons */}
+        <View style={styles.socialButtons}>
+          {/* Apple Sign In */}
+          <TouchableOpacity
+            style={[styles.socialButton, styles.appleButton]}
+            onPress={handleAppleSignIn}
+            disabled={socialLoading !== null || loading}
+          >
+            {socialLoading === 'apple' ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="logo-apple" size={20} color="#fff" />
+                <Text style={styles.appleButtonText}>Continue with Apple</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Google Sign In */}
+          <TouchableOpacity
+            style={[styles.socialButton, styles.googleButton]}
+            onPress={handleGoogleSignIn}
+            disabled={socialLoading !== null || loading}
+          >
+            {socialLoading === 'google' ? (
+              <ActivityIndicator size="small" color="#333" />
+            ) : (
+              <>
+                <Image 
+                  source={{ uri: 'https://www.google.com/favicon.ico' }} 
+                  style={styles.googleIcon}
+                />
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Divider */}
+        <View style={styles.divider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or continue with email</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Email/Password Form */}
         <View style={styles.form}>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email</Text>
@@ -148,6 +268,7 @@ export default function AuthScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!loading && socialLoading === null}
             />
           </View>
 
@@ -161,23 +282,35 @@ export default function AuthScreen() {
               placeholderTextColor="#666"
               secureTextEntry
               autoCapitalize="none"
+              editable={!loading && socialLoading === null}
             />
           </View>
 
           <TouchableOpacity
-            style={[styles.authButton, loading && styles.authButtonDisabled]}
-            onPress={handleAuth}
-            disabled={loading}
+            style={[
+              styles.authButton, 
+              (loading || socialLoading !== null) && styles.authButtonDisabled
+            ]}
+            onPress={handleEmailAuth}
+            disabled={loading || socialLoading !== null}
           >
-            <Text style={styles.authButtonText}>
-              {loading ? 'Please wait...' : (isSignUp ? 'Sign Up' : 'Sign In')}
-            </Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#25292e" />
+            ) : (
+              <Text style={styles.authButtonText}>
+                {isSignUp ? 'Create Account' : 'Sign In'}
+              </Text>
+            )}
           </TouchableOpacity>
-
 
           <TouchableOpacity
             style={styles.switchButton}
-            onPress={() => setIsSignUp(!isSignUp)}
+            onPress={() => {
+              setIsSignUp(!isSignUp);
+              setStatus('');
+              setShowVerificationMessage(false);
+            }}
+            disabled={loading || socialLoading !== null}
           >
             <Text style={styles.switchButtonText}>
               {isSignUp 
@@ -186,66 +319,64 @@ export default function AuthScreen() {
               }
             </Text>
           </TouchableOpacity>
-
-
-          {showVerificationMessage ? (
-            <View style={styles.verificationContainer}>
-              <Text style={styles.verificationTitle}>Check Your Email!</Text>
-              <Text style={styles.verificationText}>
-                We've sent you a verification link at {email}. Please check your email and click the link to verify your account before signing in.
-              </Text>
-              <TouchableOpacity
-                style={styles.verificationButton}
-                onPress={() => setShowVerificationMessage(false)}
-              >
-                <Text style={styles.verificationButtonText}>Got it!</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {emailVerified ? (
-            <View style={[styles.verificationContainer, styles.successContainer]}>
-              <Text style={[styles.verificationTitle, styles.successTitle]}>✅ Email Verified!</Text>
-              <Text style={styles.verificationText}>
-                Your email has been successfully verified. You can now sign in to your account.
-              </Text>
-              <TouchableOpacity
-                style={[styles.verificationButton, styles.successButton]}
-                onPress={() => {
-                  setEmailVerified(false);
-                  if (user) {
-                    // If user is already authenticated (which they should be after email verification), go to main app
-                    router.replace('/(tabs)');
-                  }
-                }}
-              >
-                <Text style={[styles.verificationButtonText, styles.successButtonText]}>
-                  {user ? 'Continue to App' : 'Continue to Sign In'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {status ? (
-            <View style={styles.statusContainer}>
-              <Text style={styles.statusText}>{status}</Text>
-            </View>
-          ) : null}
-
         </View>
 
+        {/* Verification Messages */}
+        {showVerificationMessage && (
+          <View style={styles.verificationContainer}>
+            <Text style={styles.verificationTitle}>📧 Check Your Email!</Text>
+            <Text style={styles.verificationText}>
+              We've sent you a verification link. Please check your email and click the link to verify your account.
+            </Text>
+            <TouchableOpacity
+              style={styles.verificationButton}
+              onPress={() => setShowVerificationMessage(false)}
+            >
+              <Text style={styles.verificationButtonText}>Got it!</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {emailVerified && (
+          <View style={[styles.verificationContainer, styles.successContainer]}>
+            <Text style={[styles.verificationTitle, styles.successTitle]}>
+              ✅ Email Verified!
+            </Text>
+            <Text style={styles.verificationText}>
+              Your email has been verified. You can now sign in.
+            </Text>
+          </View>
+        )}
+
+        {status && !showVerificationMessage && !emailVerified && (
+          <View style={styles.statusContainer}>
+            <Text style={styles.statusText}>{status}</Text>
+          </View>
+        )}
+
+        {/* Skip Option */}
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={handleSkip}
+          disabled={loading || socialLoading !== null}
+        >
+          <Text style={styles.skipButtonText}>Skip for now</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.skipHint}>
+          You can create an account later to save your catches and connect with other anglers
+        </Text>
+
+        {/* Footer */}
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.contactButton}
             onPress={() => {
-              Linking.openURL('mailto:whatflyfishing@gmail.com?subject=WhatFly Support&body=Hi WhatFly Team,');
+              Linking.openURL('mailto:whatflyfishing@gmail.com?subject=WhatFly Support');
             }}
           >
             <Text style={styles.contactButtonText}>📧 Contact Support</Text>
           </TouchableOpacity>
-          <Text style={styles.footerText}>
-            Having trouble? Email us at whatflyfishing@gmail.com
-          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -262,30 +393,93 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 16,
+    marginTop: 12,
+  },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
   logo: {
-    width: 525,
-    height: 225,
-    marginBottom: 20,
+    width: 300,
+    height: 120,
+    marginBottom: 16,
   },
   subtitle: {
-    fontSize: 18,
-    color: '#ccc',
+    fontSize: 16,
+    color: '#999',
     textAlign: 'center',
+    maxWidth: 280,
   },
+  // Social buttons
+  socialButtons: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    gap: 10,
+  },
+  appleButton: {
+    backgroundColor: '#000',
+  },
+  appleButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  googleButton: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  googleButtonText: {
+    color: '#333',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
+  },
+  // Divider
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#3a3a3a',
+  },
+  dividerText: {
+    color: '#666',
+    paddingHorizontal: 16,
+    fontSize: 14,
+  },
+  // Form
   form: {
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#fff',
     marginBottom: 8,
@@ -293,7 +487,7 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: '#3a3a3a',
     borderRadius: 8,
-    padding: 12,
+    padding: 14,
     color: '#fff',
     fontSize: 16,
     borderWidth: 1,
@@ -301,9 +495,10 @@ const styles = StyleSheet.create({
   },
   authButton: {
     backgroundColor: '#ffd33d',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 20,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    alignItems: 'center',
   },
   authButtonDisabled: {
     backgroundColor: '#666',
@@ -312,29 +507,16 @@ const styles = StyleSheet.create({
     color: '#25292e',
     fontSize: 18,
     fontWeight: 'bold',
-    textAlign: 'center',
   },
   switchButton: {
     padding: 10,
+    alignItems: 'center',
   },
   switchButtonText: {
     color: '#ffd33d',
-    fontSize: 16,
-    textAlign: 'center',
+    fontSize: 15,
   },
-  statusContainer: {
-    marginTop: 20,
-    padding: 10,
-    backgroundColor: '#3a3a3a',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#555',
-  },
-  statusText: {
-    color: '#ffd33d',
-    fontSize: 14,
-    textAlign: 'center',
-  },
+  // Verification messages
   verificationContainer: {
     marginTop: 20,
     padding: 20,
@@ -346,14 +528,13 @@ const styles = StyleSheet.create({
   },
   verificationTitle: {
     color: '#4ade80',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 12,
-    textAlign: 'center',
   },
   verificationText: {
     color: '#e5e7eb',
-    fontSize: 16,
+    fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 16,
@@ -376,16 +557,39 @@ const styles = StyleSheet.create({
   successTitle: {
     color: '#22c55e',
   },
-  successButton: {
-    backgroundColor: '#22c55e',
+  statusContainer: {
+    marginTop: 20,
+    padding: 12,
+    backgroundColor: '#3a3a3a',
+    borderRadius: 8,
   },
-  successButtonText: {
-    color: '#ffffff',
+  statusText: {
+    color: '#ffd33d',
+    fontSize: 14,
+    textAlign: 'center',
   },
-  footer: {
-    marginTop: 40,
+  // Skip option
+  skipButton: {
+    marginTop: 32,
+    padding: 12,
     alignItems: 'center',
+  },
+  skipButtonText: {
+    color: '#999',
+    fontSize: 16,
+    textDecorationLine: 'underline',
+  },
+  skipHint: {
+    color: '#666',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 8,
     paddingHorizontal: 20,
+  },
+  // Footer
+  footer: {
+    marginTop: 32,
+    alignItems: 'center',
   },
   contactButton: {
     backgroundColor: '#3a3a3a',
@@ -394,48 +598,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#555',
-    marginBottom: 10,
   },
   contactButtonText: {
     color: '#ffd33d',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  footerText: {
-    color: '#8E8E93',
     fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffd33d',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  message: {
-    fontSize: 16,
-    color: '#ffffff',
-    textAlign: 'center',
-    marginBottom: 30,
-  },
-  button: {
-    backgroundColor: '#ffd33d',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#1a1d21',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
 });
