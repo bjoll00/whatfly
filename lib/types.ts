@@ -288,3 +288,27 @@ export interface Coordinates {
   latitude: number;
   longitude: number;
 }
+
+// User profile for social features
+export interface Profile {
+  id: string;
+  username: string;
+  display_name?: string;
+  avatar_url?: string;
+  bio?: string;
+  location?: string;
+  fishing_experience?: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+  username_changed_at?: string; // Track when username was last changed
+  created_at: string;
+  updated_at: string;
+}
+
+// Profile update payload (all fields optional except id is implicit)
+export interface ProfileUpdate {
+  username?: string;
+  display_name?: string;
+  avatar_url?: string;
+  bio?: string;
+  location?: string;
+  fishing_experience?: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+}
