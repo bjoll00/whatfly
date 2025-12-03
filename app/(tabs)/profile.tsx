@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -16,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../../lib/AuthContext';
+import { getFollowCounts, getUserPosts, Post } from '../../lib/postService';
 
 export default function ProfileScreen() {
   const { user, profile, needsUsername, signOut, deleteAccount } = useAuth();
@@ -23,6 +25,35 @@ export default function ProfileScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isLoadingPosts, setIsLoadingPosts] = useState(false);
+  const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
+
+  // Load posts when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (user && profile) {
+        loadUserData();
+      }
+    }, [user, profile])
+  );
+
+  const loadUserData = async () => {
+    if (!user) return;
+    setIsLoadingPosts(true);
+    try {
+      const [userPosts, counts] = await Promise.all([
+        getUserPosts(user.id),
+        getFollowCounts(user.id),
+      ]);
+      setPosts(userPosts);
+      setFollowCounts(counts);
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setIsLoadingPosts(false);
+    }
+  };
 
   const handleSignOut = () => {
     Alert.alert(
@@ -255,10 +286,6 @@ export default function ProfileScreen() {
               @{profile?.username || 'username'}
             </Text>
             
-            {profile?.display_name && (
-              <Text style={styles.displayName}>{profile.display_name}</Text>
-            )}
-            
             {profile?.bio && (
               <Text style={styles.bio}>{profile.bio}</Text>
             )}
@@ -272,22 +299,68 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Stats Section (Coming Soon) */}
+          {/* Stats Section */}
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>--</Text>
-              <Text style={styles.statLabel}>Catches</Text>
+              <Text style={styles.statValue}>{posts.length}</Text>
+              <Text style={styles.statLabel}>Posts</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>--</Text>
-              <Text style={styles.statLabel}>Favorites</Text>
+              <Text style={styles.statValue}>{followCounts.followers}</Text>
+              <Text style={styles.statLabel}>Followers</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>--</Text>
+              <Text style={styles.statValue}>{followCounts.following}</Text>
               <Text style={styles.statLabel}>Following</Text>
             </View>
+          </View>
+
+          {/* My Posts Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>My Posts</Text>
+              <TouchableOpacity onPress={() => router.push('/create-post')}>
+                <Ionicons name="add-circle-outline" size={24} color="#ffd33d" />
+              </TouchableOpacity>
+            </View>
+            
+            {isLoadingPosts ? (
+              <ActivityIndicator size="small" color="#ffd33d" style={{ marginVertical: 20 }} />
+            ) : posts.length === 0 ? (
+              <View style={styles.emptyPosts}>
+                <Ionicons name="camera-outline" size={48} color="#666" />
+                <Text style={styles.emptyPostsText}>No posts yet</Text>
+                <TouchableOpacity 
+                  style={styles.createPostButton}
+                  onPress={() => router.push('/create-post')}
+                >
+                  <Text style={styles.createPostButtonText}>Create Your First Post</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.postsGrid}>
+                {posts.map((post) => {
+                  const firstImage = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
+                  return (
+                    <TouchableOpacity 
+                      key={post.id}
+                      style={styles.postThumbnail}
+                      onPress={() => router.push(`/post/${post.id}`)}
+                    >
+                      {firstImage ? (
+                        <Image source={{ uri: firstImage.image_url }} style={styles.thumbnailImage} />
+                      ) : (
+                        <View style={styles.thumbnailPlaceholder}>
+                          <Ionicons name="document-text-outline" size={24} color="#666" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </View>
 
           {/* Account Info */}
@@ -666,11 +739,61 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 12,
+  },
+  // Posts grid styles
+  emptyPosts: {
+    alignItems: 'center',
+    padding: 30,
+    backgroundColor: '#1a1d21',
+    borderRadius: 12,
+  },
+  emptyPostsText: {
+    color: '#999',
+    fontSize: 16,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  createPostButton: {
+    backgroundColor: '#ffd33d',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  createPostButtonText: {
+    color: '#25292e',
+    fontWeight: '600',
+  },
+  postsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  postThumbnail: {
+    width: '32%',
+    aspectRatio: 1,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbnailPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#3a3a3a',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   infoCard: {
     backgroundColor: '#1a1d21',

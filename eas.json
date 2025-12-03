@@ -7,8 +7,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWdjdndvcmcwOGR6MmpwczAwdzFzbzBnIn0.UnxcMVxCP3aMw7njywx7lA",
-        "MAPBOX_DOWNLOADS_TOKEN": "sk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWdoOHdnbnEwZjlpMmpvZDZibm9idjZ0In0.bym2OsyOzJ-Q78UzB-E5Rw"
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1Ijoid2hhdGZseSIsImEiOiJjbWdjdndvcmcwOGR6MmpwczAwdzFzbzBnIn0.UnxcMVxCP3aMw7njywx7lA"
       },
       "ios": {
         "simulator": false,
