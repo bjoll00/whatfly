@@ -45,6 +45,7 @@ export default function RootLayout() {
           <Stack.Screen name="admin-feedback" options={{ title: 'Admin - Feedback Management' }} />
           <Stack.Screen name="test-feedback-permissions" options={{ title: 'Test Feedback Permissions' }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
         </Stack>
       </FishingProvider>
     </AuthProvider>
