@@ -5,17 +5,17 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { canChangeUsername, getUsernameValidationError, isValidUsername } from '../lib/profileService';
@@ -34,7 +34,6 @@ export default function EditProfileScreen() {
   
   // Form state
   const [username, setUsername] = useState(profile?.username || '');
-  const [displayName, setDisplayName] = useState(profile?.display_name || '');
   const [bio, setBio] = useState(profile?.bio || '');
   const [location, setLocation] = useState(profile?.location || '');
   const [fishingExperience, setFishingExperience] = useState<ProfileUpdate['fishing_experience']>(
@@ -72,13 +71,12 @@ export default function EditProfileScreen() {
   useEffect(() => {
     const changed =
       username !== (profile?.username || '') ||
-      displayName !== (profile?.display_name || '') ||
       bio !== (profile?.bio || '') ||
       location !== (profile?.location || '') ||
       fishingExperience !== (profile?.fishing_experience || undefined) ||
       avatarUri !== (profile?.avatar_url || null);
     setHasChanges(changed);
-  }, [username, displayName, bio, location, fishingExperience, avatarUri, profile]);
+  }, [username, bio, location, fishingExperience, avatarUri, profile]);
 
   // Pick avatar image
   const pickAvatar = async () => {
@@ -251,9 +249,6 @@ export default function EditProfileScreen() {
       if (username !== profile?.username) {
         updates.username = username;
       }
-      if (displayName !== (profile?.display_name || '')) {
-        updates.display_name = displayName || undefined;
-      }
       if (bio !== (profile?.bio || '')) {
         updates.bio = bio || undefined;
       }
@@ -283,7 +278,7 @@ export default function EditProfileScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [hasChanges, isSaving, username, displayName, bio, location, fishingExperience, avatarUri, profile, usernameAvailable, updateProfile]);
+  }, [hasChanges, isSaving, username, bio, location, fishingExperience, avatarUri, profile, usernameAvailable, updateProfile]);
 
   const handleCancel = () => {
     if (hasChanges) {
@@ -430,20 +425,6 @@ export default function EditProfileScreen() {
                 <Text style={styles.fieldError}>{usernameError}</Text>
               ) : null}
             </View>
-          </View>
-
-          {/* Display Name */}
-          <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Display Name</Text>
-            <TextInput
-              style={styles.input}
-              value={displayName}
-              onChangeText={setDisplayName}
-              placeholder="Your display name"
-              placeholderTextColor="#666"
-              maxLength={50}
-            />
-            <Text style={styles.charCount}>{displayName.length}/50</Text>
           </View>
 
           {/* Bio */}
