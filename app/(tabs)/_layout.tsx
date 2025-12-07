@@ -1,9 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import {router, Tabs} from 'expo-router';
+import { router, Tabs } from 'expo-router';
 import React from 'react';
-import {Image, Pressable, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
-import {useAuth} from '../../lib/AuthContext';
-import ProfileScreen from "@/app/(tabs)/profile";
+import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useAuth } from '../../lib/AuthContext';
 
 const BrownTroutLogo = require('@/assets/images/Brown_trout_logo (2).png');
 
@@ -84,9 +83,6 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="feedback/index"
-        options={{
       <Tabs.Screen 
         name="feed" 
         options={{ 
@@ -94,7 +90,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'newspaper' : 'newspaper-outline'} color={color} size={24} />
           ),
-          headerShown: false, // Feed has its own header
+          headerShown: false,
         }} 
       />
       <Tabs.Screen 
