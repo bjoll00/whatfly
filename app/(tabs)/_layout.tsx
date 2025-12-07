@@ -56,6 +56,16 @@ export default function TabLayout() {
         }} 
       />
       <Tabs.Screen 
+        name="feed" 
+        options={{ 
+          title: 'Feed', 
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'newspaper' : 'newspaper-outline'} color={color} size={24} />
+          ),
+          headerShown: false, // Feed has its own header
+        }} 
+      />
+      <Tabs.Screen 
         name="feedback/index" 
         options={{ 
           title: 'Feedback',
