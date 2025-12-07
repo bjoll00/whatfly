@@ -2,28 +2,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useAuth } from '../../lib/AuthContext';
 import {
-  addComment,
-  Comment,
-  deletePost,
-  getComments,
-  hasUserLikedPost,
-  likePost,
-  Post,
-  unlikePost,
+    addComment,
+    Comment,
+    deletePost,
+    getComments,
+    hasUserLikedPost,
+    likePost,
+    Post,
+    unlikePost,
 } from '../../lib/postService';
 import { supabase } from '../../lib/supabase';
 

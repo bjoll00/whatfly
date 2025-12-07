@@ -43,7 +43,7 @@ export default function TabLayout() {
       alignItems: 'center',
       justifyContent: 'center',
     }}>
-      <TouchableOpacity onPress={() => router.push('/profile')}>
+      <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
         {profile?.avatar_url ? (
           <Image
             source={{uri: profile.avatar_url}}
@@ -65,7 +65,7 @@ export default function TabLayout() {
           backgroundColor: '#25292e'
         },
         headerShadowVisible: false,
-        headerTintColor: '#25292e',
+        headerTintColor: '#fff',
         tabBarStyle: {
           backgroundColor: '#25292e',
         },
@@ -110,12 +110,25 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
+          tabBarLabel: () => null,
           tabBarIcon: ({color, focused}) => (
-            <Ionicons
-              name={focused ? 'person' : 'person-outline'}
-              color={color}
-              size={24}
-            />
+            profile?.avatar_url ? (
+              <View style={[
+                styles.tabAvatar,
+                focused && styles.tabAvatarFocused
+              ]}>
+                <Image
+                  source={{uri: profile.avatar_url}}
+                  style={styles.tabAvatarImage}
+                />
+              </View>
+            ) : (
+              <Ionicons
+                name={focused ? 'person' : 'person-outline'}
+                color={color}
+                size={24}
+              />
+            )
           ),
         }}
       />
@@ -131,9 +144,24 @@ export default function TabLayout() {
 }
 const styles = StyleSheet.create({
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
-
+  tabAvatar: {
+    width: 35,
+    height: 35,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    marginTop: 15,
+  },
+  tabAvatarFocused: {
+    borderColor: '#ffd33d',
+  },
+  tabAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
 });
