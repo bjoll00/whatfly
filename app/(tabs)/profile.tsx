@@ -28,6 +28,11 @@ export default function ProfileScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
+  const [activePostTab, setActivePostTab] = useState<'photos' | 'thoughts'>('photos');
+
+  // Filter posts into photos (with images) and thoughts (without images)
+  const photoPosts = posts.filter(post => post.post_images && post.post_images.length > 0);
+  const thoughtPosts = posts.filter(post => !post.post_images || post.post_images.length === 0);
 
   // Load posts when screen is focused
   useFocusEffect(
@@ -325,41 +330,104 @@ export default function ProfileScreen() {
                 <Ionicons name="add-circle-outline" size={24} color="#ffd33d" />
               </TouchableOpacity>
             </View>
+
+            {/* Post Type Tabs */}
+            <View style={styles.postTabs}>
+              <TouchableOpacity
+                style={[styles.postTab, activePostTab === 'photos' && styles.postTabActive]}
+                onPress={() => setActivePostTab('photos')}
+              >
+                <Ionicons 
+                  name="images-outline" 
+                  size={20} 
+                  color={activePostTab === 'photos' ? '#ffd33d' : '#666'} 
+                />
+                <Text style={[styles.postTabText, activePostTab === 'photos' && styles.postTabTextActive]}>
+                  Photos ({photoPosts.length})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.postTab, activePostTab === 'thoughts' && styles.postTabActive]}
+                onPress={() => setActivePostTab('thoughts')}
+              >
+                <Ionicons 
+                  name="chatbubble-ellipses-outline" 
+                  size={20} 
+                  color={activePostTab === 'thoughts' ? '#ffd33d' : '#666'} 
+                />
+                <Text style={[styles.postTabText, activePostTab === 'thoughts' && styles.postTabTextActive]}>
+                  Thoughts ({thoughtPosts.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
             
             {isLoadingPosts ? (
               <ActivityIndicator size="small" color="#ffd33d" style={{ marginVertical: 20 }} />
-            ) : posts.length === 0 ? (
-              <View style={styles.emptyPosts}>
-                <Ionicons name="camera-outline" size={48} color="#666" />
-                <Text style={styles.emptyPostsText}>No posts yet</Text>
-                <TouchableOpacity 
-                  style={styles.createPostButton}
-                  onPress={() => router.push('/create-post')}
-                >
-                  <Text style={styles.createPostButtonText}>Create Your First Post</Text>
-                </TouchableOpacity>
-              </View>
+            ) : activePostTab === 'photos' ? (
+              // Photos Grid
+              photoPosts.length === 0 ? (
+                <View style={styles.emptyPosts}>
+                  <Ionicons name="camera-outline" size={48} color="#666" />
+                  <Text style={styles.emptyPostsText}>No photos yet</Text>
+                  <TouchableOpacity 
+                    style={styles.createPostButton}
+                    onPress={() => router.push('/create-post')}
+                  >
+                    <Text style={styles.createPostButtonText}>Share a Photo</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.postsGrid}>
+                  {photoPosts.map((post) => {
+                    const firstImage = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
+                    return (
+                      <TouchableOpacity 
+                        key={post.id}
+                        style={styles.postThumbnail}
+                        onPress={() => router.push(`/post/${post.id}`)}
+                      >
+                        <Image source={{ uri: firstImage?.image_url }} style={styles.thumbnailImage} />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )
             ) : (
-              <View style={styles.postsGrid}>
-                {posts.map((post) => {
-                  const firstImage = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
-                  return (
+              // Thoughts List
+              thoughtPosts.length === 0 ? (
+                <View style={styles.emptyPosts}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={48} color="#666" />
+                  <Text style={styles.emptyPostsText}>No thoughts yet</Text>
+                  <TouchableOpacity 
+                    style={styles.createPostButton}
+                    onPress={() => router.push('/create-post')}
+                  >
+                    <Text style={styles.createPostButtonText}>Share a Thought</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.thoughtsList}>
+                  {thoughtPosts.map((post) => (
                     <TouchableOpacity 
                       key={post.id}
-                      style={styles.postThumbnail}
+                      style={styles.thoughtCard}
                       onPress={() => router.push(`/post/${post.id}`)}
                     >
-                      {firstImage ? (
-                        <Image source={{ uri: firstImage.image_url }} style={styles.thumbnailImage} />
-                      ) : (
-                        <View style={styles.thumbnailPlaceholder}>
-                          <Ionicons name="document-text-outline" size={24} color="#666" />
-                        </View>
-                      )}
+                      <Text style={styles.thoughtText} numberOfLines={4}>
+                        {post.caption}
+                      </Text>
+                      <View style={styles.thoughtFooter}>
+                        {post.location_name && (
+                          <Text style={styles.thoughtLocation}>📍 {post.location_name}</Text>
+                        )}
+                        <Text style={styles.thoughtDate}>
+                          {new Date(post.created_at).toLocaleDateString()}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
+                  ))}
+                </View>
+              )
             )}
           </View>
 
@@ -394,6 +462,15 @@ export default function ProfileScreen() {
             <TouchableOpacity style={styles.settingsItem} onPress={() => openSupportEmail()}>
               <Ionicons name="help-circle-outline" size={24} color="#ffd33d" />
               <Text style={styles.settingsItemText}>Contact Support</Text>
+              <Ionicons name="chevron-forward" size={20} color="#666" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.settingsItem}
+              onPress={() => router.push('/(tabs)/feedback')}
+            >
+              <Ionicons name="chatbubble-outline" size={24} color="#ffd33d" />
+              <Text style={styles.settingsItemText}>Send Feedback</Text>
               <Ionicons name="chevron-forward" size={20} color="#666" />
             </TouchableOpacity>
 
@@ -787,6 +864,64 @@ const styles = StyleSheet.create({
   thumbnailImage: {
     width: '100%',
     height: '100%',
+  },
+  // Post tabs styles
+  postTabs: {
+    flexDirection: 'row',
+    backgroundColor: '#1a1d21',
+    borderRadius: 8,
+    marginBottom: 16,
+    padding: 4,
+  },
+  postTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 6,
+    gap: 6,
+  },
+  postTabActive: {
+    backgroundColor: '#25292e',
+  },
+  postTabText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  postTabTextActive: {
+    color: '#ffd33d',
+  },
+  // Thoughts list styles
+  thoughtsList: {
+    gap: 12,
+  },
+  thoughtCard: {
+    backgroundColor: '#1a1d21',
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: '#ffd33d',
+  },
+  thoughtText: {
+    color: '#fff',
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  thoughtFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  thoughtLocation: {
+    color: '#999',
+    fontSize: 12,
+  },
+  thoughtDate: {
+    color: '#666',
+    fontSize: 12,
   },
   thumbnailPlaceholder: {
     width: '100%',

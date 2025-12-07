@@ -49,6 +49,8 @@ export default function RootLayout() {
           <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="post/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="create-post" options={{ headerShown: false }} />
+          <Stack.Screen name="conversation/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="index" options={{ headerShown: false }} />
         </Stack>
       </FishingProvider>
     </AuthProvider>

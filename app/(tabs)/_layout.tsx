@@ -94,23 +94,26 @@ export default function TabLayout() {
         }} 
       />
       <Tabs.Screen 
+        name="messages" 
+        options={{ 
+          title: 'Messages', 
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} color={color} size={24} />
+          ),
+          headerShown: false,
+        }} 
+      />
+      <Tabs.Screen 
         name="feedback/index" 
         options={{ 
-          title: 'Feedback',
-          tabBarIcon: ({color, focused}) => (
-            <Ionicons
-              name={focused ? 'chatbubble' : 'chatbubble-outline'}
-              color={color}
-              size={24}
-            />
-          ),
+          href: null, // Hidden from tab bar, accessible via profile settings
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarLabel: () => null,
+          tabBarLabel: profile?.avatar_url ? () => null : 'Profile',
           tabBarIcon: ({color, focused}) => (
             profile?.avatar_url ? (
               <View style={[
