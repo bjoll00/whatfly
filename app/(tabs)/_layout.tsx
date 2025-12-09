@@ -32,7 +32,7 @@ export default function TabLayout() {
   );
   function HeaderRight(){
   if (!user) {
-    return null; // or a loading indicator
+    return null;
   }
   return (
     <View style={{

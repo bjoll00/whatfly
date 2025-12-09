@@ -404,8 +404,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   header: {
+    marginVertical: 72,
     alignItems: 'center',
-    marginBottom: 32,
   },
   logo: {
     width: 300,
