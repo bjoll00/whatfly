@@ -30,8 +30,11 @@ export default function TabLayout() {
       />
     </View>
   );
-
-  const HeaderRight = () => (
+  function HeaderRight(){
+  if (!user) {
+    return null; // or a loading indicator
+  }
+  return (
     <View style={{
       marginRight: 40,
       marginBottom: 20,
@@ -56,6 +59,7 @@ export default function TabLayout() {
       </TouchableOpacity>
     </View>
   );
+  }
 
   return (
     <Tabs
