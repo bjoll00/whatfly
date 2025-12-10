@@ -119,7 +119,7 @@ export default function TabLayout() {
           title: 'Profile',
           tabBarLabel: profile?.avatar_url ? () => null : 'Profile',
           tabBarIcon: ({color, focused}) => (
-            profile?.avatar_url ? (
+            profile?.avatar_url && user ? (
               <View style={[
                 styles.tabAvatar,
                 focused && styles.tabAvatarFocused
