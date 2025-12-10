@@ -341,3 +341,4 @@ export async function getTotalUnreadCount(userId: string): Promise<number> {
     return 0;
   }
 }
+
