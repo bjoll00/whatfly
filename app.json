@@ -24,8 +24,8 @@
     "category": "sports",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.whatfly.fishing",
-      "buildNumber": "1.0.1",
+      "bundleIdentifier": "com.whatflyfishing.app",
+      "buildNumber": "1.0.0",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to take photos of your catches and fishing conditions.",
@@ -42,7 +42,7 @@
         "backgroundColor": "#25292e"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.whatfly.fishing",
+      "package": "com.whatflyfishing.app",
       "versionCode": 1,
       "permissions": [
         "android.permission.INTERNET",
@@ -53,7 +53,7 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
-      "playStoreUrl": "https://play.google.com/store/apps/details?id=com.whatfly.fishing"
+      "playStoreUrl": "https://play.google.com/store/apps/details?id=com.whatflyfishing.app"
     },
     "web": {
       "bundler": "metro",

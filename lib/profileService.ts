@@ -10,20 +10,10 @@ import { Profile, ProfileUpdate } from './types';
 
 const PROFILES_TABLE = 'profiles';
 
-// Simple profanity word list (common profanity - keep this list private)
-const PROFANITY_LIST = [
-  'fuck', 'shit', 'ass', 'bitch', 'dick', 'cock', 'pussy', 'cunt', 
-  'bastard', 'damn', 'piss', 'slut', 'whore', 'fag', 'nigger', 'nigga',
-  'retard', 'porn', 'sex', 'penis', 'vagina', 'anus', 'dildo',
-  // Common variations
-  'fck', 'fuk', 'fuq', 'sht', 'btch', 'dck', 'pss', 'cnt',
-  'f_ck', 'sh_t', 'b_tch', 'd_ck', 'c_ck', 'p_ssy',
-];
-
 // Reserved words that cannot be used in usernames (case-insensitive)
+// Note: 'whatfly' variants are handled separately to allow the official account
 const RESERVED_WORDS = [
-  // Brand protection
-  'whatfly', 'what_fly', 'whatflyfishing', 'whatfly_fishing',
+  // Brand protection (whatfly handled separately)
   'official', 'verified', 'real', 'authentic', 'legit',
   // Admin/System
   'admin', 'administrator', 'moderator', 'mod', 'support', 'helpdesk', 
@@ -39,8 +29,14 @@ const RESERVED_WORDS = [
   'test', 'testing', 'example', 'demo', 'sample',
 ];
 
-// Days required between username changes
-const USERNAME_CHANGE_COOLDOWN_DAYS = 7;
+// WhatFly brand usernames - only allowed for the official account
+const WHATFLY_RESERVED = ['whatfly', 'what_fly', 'whatflyfishing', 'whatfly_fishing'];
+
+// The official WhatFly account user ID
+const WHATFLY_OFFICIAL_USER_ID: string | null = '83fac7b2-583e-428f-9597-fd673114ec3a';
+
+// Days required between username changes (0 = no limit)
+const USERNAME_CHANGE_COOLDOWN_DAYS = 0;
 
 /**
  * Check if username contains reserved words
@@ -51,49 +47,11 @@ function containsReservedWord(username: string): boolean {
 }
 
 /**
- * Check if username contains profanity
- * Also checks for leet speak substitutions
+ * Check if username is a WhatFly brand username
  */
-function containsProfanity(username: string): boolean {
+function isWhatFlyUsername(username: string): boolean {
   const lowerUsername = username.toLowerCase();
-  
-  // Check direct match against profanity list
-  for (const word of PROFANITY_LIST) {
-    if (lowerUsername.includes(word)) {
-      return true;
-    }
-  }
-  
-  // Check with leet speak decoded
-  const leetDecoded = decodeLeetSpeak(lowerUsername);
-  for (const word of PROFANITY_LIST) {
-    if (leetDecoded.includes(word)) {
-      return true;
-    }
-  }
-  
-  // Check username without underscores (in case profanity is split)
-  const withoutUnderscores = lowerUsername.replace(/_/g, '');
-  for (const word of PROFANITY_LIST) {
-    if (withoutUnderscores.includes(word)) {
-      return true;
-    }
-  }
-  
-  return false;
-}
-
-/**
- * Decode common leet speak substitutions
- */
-function decodeLeetSpeak(text: string): string {
-  const leetMap: { [key: string]: string } = {
-    '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's',
-    '7': 't', '8': 'b', '9': 'g', '@': 'a', '$': 's',
-    '!': 'i', '|': 'l', '+': 't',
-  };
-  
-  return text.split('').map(char => leetMap[char] || char).join('');
+  return WHATFLY_RESERVED.some(word => lowerUsername === word || lowerUsername.includes(word));
 }
 
 /**
@@ -177,8 +135,8 @@ export async function getProfileByUsername(username: string): Promise<Profile | 
  */
 export async function checkUsernameAvailable(username: string, excludeUserId?: string): Promise<boolean> {
   try {
-    // Validate username format first
-    const validationError = getUsernameValidationError(username);
+    // Validate username format first (pass userId to allow WhatFly usernames for official account)
+    const validationError = getUsernameValidationError(username, excludeUserId);
     if (validationError) {
       return false;
     }
@@ -218,17 +176,17 @@ export async function checkUsernameAvailable(username: string, excludeUserId?: s
  * - 1-20 characters
  * - Only letters, numbers, and underscores
  * - No reserved words
- * - No profanity
  */
-export function isValidUsername(username: string): boolean {
-  return getUsernameValidationError(username) === null;
+export function isValidUsername(username: string, userId?: string): boolean {
+  return getUsernameValidationError(username, userId) === null;
 }
 
 /**
  * Get username validation error message
  * Returns null if username is valid, error message otherwise
+ * @param userId - Optional user ID to check if user is allowed special usernames
  */
-export function getUsernameValidationError(username: string): string | null {
+export function getUsernameValidationError(username: string, userId?: string): string | null {
   // Check if empty
   if (!username || username.length === 0) {
     return 'Username is required';
@@ -249,9 +207,13 @@ export function getUsernameValidationError(username: string): string | null {
     return 'This username is not allowed';
   }
   
-  // Check for profanity
-  if (containsProfanity(username)) {
-    return 'This username is not allowed';
+  // Check for WhatFly brand usernames (only allowed for official account)
+  if (isWhatFlyUsername(username)) {
+    // If official user ID is set, only that user can use WhatFly usernames
+    if (WHATFLY_OFFICIAL_USER_ID && userId !== WHATFLY_OFFICIAL_USER_ID) {
+      return 'This username is reserved';
+    }
+    // If no official ID set, first-come-first-served (checked via availability)
   }
   
   return null;
@@ -271,8 +233,8 @@ export async function validateUsername(
   username: string, 
   excludeUserId?: string
 ): Promise<UsernameValidationResult> {
-  // Check format first
-  const formatError = getUsernameValidationError(username);
+  // Check format first (pass userId to allow WhatFly usernames for official account)
+  const formatError = getUsernameValidationError(username, excludeUserId);
   if (formatError) {
     return { isValid: false, error: formatError };
   }
@@ -294,14 +256,14 @@ export async function createProfile(
   username: string
 ): Promise<{ profile?: Profile; error?: any }> {
   try {
-    // Validate username
-    const validationError = getUsernameValidationError(username);
+    // Validate username (pass userId to allow WhatFly usernames for official account)
+    const validationError = getUsernameValidationError(username, userId);
     if (validationError) {
       return { error: { message: validationError } };
     }
 
     // Check if username is available
-    const isAvailable = await checkUsernameAvailable(username);
+    const isAvailable = await checkUsernameAvailable(username, userId);
     if (!isAvailable) {
       return { error: { message: 'Username is already taken' } };
     }
@@ -377,8 +339,8 @@ export async function updateProfile(
         }
       }
       
-      // Validate username format (includes reserved words and profanity check)
-      const validationError = getUsernameValidationError(updates.username);
+      // Validate username format (includes reserved words check)
+      const validationError = getUsernameValidationError(updates.username, userId);
       if (validationError) {
         return { error: { message: validationError } };
       }
