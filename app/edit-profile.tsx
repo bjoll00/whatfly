@@ -201,8 +201,8 @@ export default function EditProfileScreen() {
       return;
     }
 
-    // Validate format
-    const error = getUsernameValidationError(username);
+    // Validate format (pass userId to allow WhatFly usernames for official account)
+    const error = getUsernameValidationError(username, user?.id);
     if (error) {
       setUsernameError(error);
       return;
@@ -230,9 +230,9 @@ export default function EditProfileScreen() {
   const handleSave = useCallback(async () => {
     if (!hasChanges || isSaving) return;
 
-    // Validate username
-    if (!isValidUsername(username)) {
-      Alert.alert('Invalid Username', getUsernameValidationError(username) || 'Please enter a valid username');
+    // Validate username (pass userId to allow WhatFly usernames for official account)
+    if (!isValidUsername(username, user?.id)) {
+      Alert.alert('Invalid Username', getUsernameValidationError(username, user?.id) || 'Please enter a valid username');
       return;
     }
 
@@ -296,7 +296,7 @@ export default function EditProfileScreen() {
   };
 
   const canSave = hasChanges && 
-    isValidUsername(username) && 
+    isValidUsername(username, user?.id) && 
     (username === profile?.username || usernameAvailable === true) && 
     !isCheckingUsername &&
     !isSaving &&

@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Linking,
+    Platform,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -11,10 +13,10 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import FeedbackForm from '../../../components/FeedbackForm';
-import { useAuth } from '../../../lib/AuthContext';
-import { feedbackService } from '../../../lib/supabase';
-import { Feedback } from '../../../lib/types';
+import FeedbackForm from '../components/FeedbackForm';
+import { useAuth } from '../lib/AuthContext';
+import { feedbackService } from '../lib/supabase';
+import { Feedback } from '../lib/types';
 
 export default function FeedbackScreen() {
   const { user } = useAuth();
@@ -98,23 +100,40 @@ export default function FeedbackScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ffd33d" />
-        <Text style={styles.loadingText}>Loading feedback...</Text>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Feedback</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.loadingContent}>
+          <ActivityIndicator size="large" color="#ffd33d" />
+          <Text style={styles.loadingText}>Loading feedback...</Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Feedback</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
       <ScrollView
         style={styles.scrollView}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Feedback & Suggestions</Text>
+        <View style={styles.contentHeader}>
           <Text style={styles.subtitle}>
             Help us improve WhatFly by sharing your thoughts and ideas
           </Text>
@@ -212,13 +231,32 @@ export default function FeedbackScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#25292e',
   },
-  loadingContainer: {
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#3a3a3a',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  loadingContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
   },
   loadingText: {
     color: '#fff',
@@ -228,15 +266,9 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  header: {
+  contentHeader: {
     padding: 20,
     paddingBottom: 10,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
@@ -282,7 +314,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   feedbackCard: {
-    backgroundColor: '#2c2c2e',
+    backgroundColor: '#1a1d21',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -348,7 +380,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2c2c2e',
+    backgroundColor: '#1a1d21',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
