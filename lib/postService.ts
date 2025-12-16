@@ -33,6 +33,7 @@ export interface PostImage {
   image_url: string;
   display_order: number;
   created_at: string;
+  is_video?: boolean;
 }
 
 export interface Comment {
@@ -48,6 +49,11 @@ export interface Comment {
   };
 }
 
+export interface MediaItem {
+  uri: string;
+  isVideo: boolean;
+}
+
 export interface CreatePostInput {
   caption?: string;
   fly_id?: string;
@@ -56,7 +62,8 @@ export interface CreatePostInput {
   longitude?: number;
   conditions?: any;
   is_public?: boolean;
-  images?: string[]; // Array of local image URIs
+  images?: string[]; // Array of local image URIs (legacy support)
+  media?: MediaItem[]; // Array of media items (images and videos)
 }
 
 // Upload image to Supabase storage
@@ -96,6 +103,43 @@ async function uploadPostImage(uri: string, postId: string, index: number): Prom
   }
 }
 
+// Upload video to Supabase storage
+async function uploadPostVideo(uri: string, postId: string, index: number): Promise<string | null> {
+  try {
+    const ext = uri.split('.').pop()?.toLowerCase() || 'mp4';
+    const contentType = `video/${ext === 'mov' ? 'quicktime' : ext}`;
+    const fileName = `${postId}/${Date.now()}-${index}.${ext}`;
+
+    // Read the file as base64
+    const base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: 'base64',
+    });
+
+    // Upload to Supabase storage (using post-images bucket for both)
+    const { error: uploadError } = await supabase.storage
+      .from('post-images')
+      .upload(fileName, decode(base64), {
+        contentType,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('Video upload error:', uploadError);
+      return null;
+    }
+
+    // Get the public URL
+    const { data: urlData } = supabase.storage
+      .from('post-images')
+      .getPublicUrl(fileName);
+
+    return urlData?.publicUrl || null;
+  } catch (error) {
+    console.error('Error uploading post video:', error);
+    return null;
+  }
+}
+
 // Create a new post
 export async function createPost(userId: string, input: CreatePostInput): Promise<{ post: Post | null; error: string | null }> {
   try {
@@ -120,8 +164,27 @@ export async function createPost(userId: string, input: CreatePostInput): Promis
       return { post: null, error: postError.message };
     }
 
-    // 2. Upload images and create post_images records
-    if (input.images && input.images.length > 0) {
+    // 2. Upload media (images and videos) and create post_images records
+    if (input.media && input.media.length > 0) {
+      for (let i = 0; i < input.media.length; i++) {
+        const mediaItem = input.media[i];
+        const mediaUrl = mediaItem.isVideo 
+          ? await uploadPostVideo(mediaItem.uri, post.id, i)
+          : await uploadPostImage(mediaItem.uri, post.id, i);
+        
+        if (mediaUrl) {
+          await supabase
+            .from('post_images')
+            .insert({
+              post_id: post.id,
+              image_url: mediaUrl,
+              display_order: i,
+              is_video: mediaItem.isVideo,
+            });
+        }
+      }
+    } else if (input.images && input.images.length > 0) {
+      // Legacy support for images-only input
       for (let i = 0; i < input.images.length; i++) {
         const imageUrl = await uploadPostImage(input.images[i], post.id, i);
         
@@ -132,6 +195,7 @@ export async function createPost(userId: string, input: CreatePostInput): Promis
               post_id: post.id,
               image_url: imageUrl,
               display_order: i,
+              is_video: false,
             });
         }
       }
@@ -147,12 +211,12 @@ export async function createPost(userId: string, input: CreatePostInput): Promis
 // Get feed posts (public posts from all users)
 export async function getFeedPosts(limit: number = 20, offset: number = 0): Promise<Post[]> {
   try {
-    // First, get the posts with images
+    // First, get the posts with images and videos
     const { data: posts, error } = await supabase
       .from('posts')
       .select(`
         *,
-        post_images (id, image_url, display_order)
+        post_images (id, image_url, display_order, is_video)
       `)
       .eq('is_public', true)
       .order('created_at', { ascending: false })
@@ -210,7 +274,7 @@ export async function getUserPosts(userId: string, limit: number = 20, offset: n
       .from('posts')
       .select(`
         *,
-        post_images (id, image_url, display_order)
+        post_images (id, image_url, display_order, is_video)
       `)
       .eq('user_id', userId)
       .order('created_at', { ascending: false })

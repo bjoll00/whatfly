@@ -54,6 +54,8 @@ export default function RootLayout() {
           <Stack.Screen name="edit-post/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="settings" options={{ headerShown: false }} />
           <Stack.Screen name="feedback" options={{ headerShown: false }} />
+          <Stack.Screen name="privacy-policy" options={{ headerShown: false }} />
+          <Stack.Screen name="terms-of-service" options={{ headerShown: false }} />
         </Stack>
       </FishingProvider>
     </AuthProvider>

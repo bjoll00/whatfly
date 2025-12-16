@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Video, ResizeMode } from 'expo-av';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Dimensions,
     FlatList,
     Image,
     KeyboardAvoidingView,
@@ -23,9 +25,12 @@ import {
     hasUserLikedPost,
     likePost,
     Post,
+    PostImage,
     unlikePost,
 } from '../../lib/postService';
 import { supabase } from '../../lib/supabase';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -46,12 +51,12 @@ export default function PostDetailScreen() {
     if (!id) return;
     
     try {
-      // Fetch post with images
+      // Fetch post with images and videos
       const { data: postData, error: postError } = await supabase
         .from('posts')
         .select(`
           *,
-          post_images (id, image_url, display_order)
+          post_images (id, image_url, display_order, is_video)
         `)
         .eq('id', id)
         .single();
@@ -272,7 +277,7 @@ export default function PostDetailScreen() {
           <Text style={styles.timeAgo}>{formatTimeAgo(post.created_at)}</Text>
         </View>
 
-        {/* Images */}
+        {/* Images and Videos */}
         {images.length > 0 && (
           <FlatList
             data={images}
@@ -280,8 +285,21 @@ export default function PostDetailScreen() {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             keyExtractor={(img) => img.id}
-            renderItem={({ item: img }) => (
-              <Image source={{ uri: img.image_url }} style={styles.postImage} />
+            renderItem={({ item: img }: { item: PostImage }) => (
+              img.is_video ? (
+                <View style={styles.videoWrapper}>
+                  <Video
+                    source={{ uri: img.image_url }}
+                    style={styles.postVideo}
+                    resizeMode={ResizeMode.CONTAIN}
+                    useNativeControls
+                    shouldPlay={false}
+                    isLooping={false}
+                  />
+                </View>
+              ) : (
+                <Image source={{ uri: img.image_url }} style={styles.postImage} />
+              )
             )}
             scrollEnabled={images.length > 1}
           />
@@ -515,9 +533,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   postImage: {
-    width: 400,
+    width: screenWidth,
     height: 320,
     resizeMode: 'cover',
+  },
+  videoWrapper: {
+    width: screenWidth,
+    height: 320,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  postVideo: {
+    width: screenWidth,
+    height: 320,
   },
   caption: {
     color: '#fff',

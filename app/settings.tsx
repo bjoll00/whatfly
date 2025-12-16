@@ -99,13 +99,42 @@ export default function SettingsScreen() {
     }
   };
 
-  const openSupportEmail = (issue?: string) => {
+  const openSupportEmail = async (issue?: string) => {
     const email = 'whatflyfishing@gmail.com';
     const subject = encodeURIComponent('WhatFly Support');
     const body = encodeURIComponent(
       `Hi WhatFly Team,\n\nI need help with my account.${issue ? `\n\nIssue: ${issue}` : ''}\n\nMy email: ${user?.email || 'N/A'}`
     );
-    Linking.openURL(`mailto:${email}?subject=${subject}&body=${body}`);
+    const mailtoUrl = `mailto:${email}?subject=${subject}&body=${body}`;
+    
+    try {
+      const canOpen = await Linking.canOpenURL(mailtoUrl);
+      if (canOpen) {
+        await Linking.openURL(mailtoUrl);
+      } else {
+        // Fallback: Show email address to copy
+        Alert.alert(
+          'Contact Support',
+          `No email app available.\n\nPlease email us at:\n${email}`,
+          [
+            {
+              text: 'Copy Email',
+              onPress: () => {
+                // Note: Would need expo-clipboard for full copy functionality
+                Alert.alert('Email Address', email);
+              },
+            },
+            { text: 'OK' },
+          ]
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        'Contact Support',
+        `Unable to open email app.\n\nPlease email us at:\n${email}`,
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   return (
@@ -151,7 +180,7 @@ export default function SettingsScreen() {
 
             <TouchableOpacity
               style={styles.settingsItem}
-              onPress={() => Linking.openURL('https://whatfly.app/privacy')}
+              onPress={() => router.push('/privacy-policy')}
             >
               <Ionicons name="shield-outline" size={24} color="#ffd33d" />
               <Text style={styles.settingsItemText}>Privacy Policy</Text>
@@ -160,7 +189,7 @@ export default function SettingsScreen() {
 
             <TouchableOpacity
               style={styles.settingsItem}
-              onPress={() => Linking.openURL('https://whatfly.app/terms')}
+              onPress={() => router.push('/terms-of-service')}
             >
               <Ionicons name="document-text-outline" size={24} color="#ffd33d" />
               <Text style={styles.settingsItemText}>Terms of Service</Text>
@@ -508,3 +537,5 @@ const styles = StyleSheet.create({
     color: '#999',
   },
 });
+
+

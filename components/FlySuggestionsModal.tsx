@@ -147,6 +147,9 @@ export default function FlySuggestionsModal({
     );
   };
 
+  // Determine if we have suggestions loaded (not loading and has results)
+  const hasSuggestionsLoaded = !isLoading && !error && suggestions && suggestions.length > 0;
+
   return (
     <Modal
       visible={visible}
@@ -155,7 +158,10 @@ export default function FlySuggestionsModal({
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
+        <View style={[
+          styles.modalContainer,
+          hasSuggestionsLoaded && styles.modalContainerExpanded
+        ]}>
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>🎣 Fly Suggestions</Text>
@@ -252,11 +258,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#25292e',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '90%',
-    minHeight: '50%', // Ensure minimum height on mobile
+    maxHeight: '70%',
+    minHeight: '40%', // Smaller initial size while loading
     borderWidth: 1,
     borderColor: '#ffd33d',
     width: '100%', // Ensure full width on mobile
+  },
+  modalContainerExpanded: {
+    maxHeight: '95%',
+    minHeight: '85%', // Expand to show more suggestions when loaded
   },
   header: {
     flexDirection: 'row',

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -17,9 +18,9 @@ import {
 } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { useFishing } from '../lib/FishingContext';
-import { createPost } from '../lib/postService';
+import { createPost, MediaItem } from '../lib/postService';
 
-const MAX_IMAGES = 4;
+const MAX_MEDIA = 4;
 
 export default function CreatePostScreen() {
   const { user } = useAuth();
@@ -27,7 +28,7 @@ export default function CreatePostScreen() {
   
   const [caption, setCaption] = useState('');
   const [locationName, setLocationName] = useState('');
-  const [images, setImages] = useState<string[]>([]);
+  const [media, setMedia] = useState<MediaItem[]>([]);
   const [includeLocation, setIncludeLocation] = useState(false);
   const [includeConditions, setIncludeConditions] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
@@ -49,14 +50,14 @@ export default function CreatePostScreen() {
     );
   }
 
-  const pickImages = async () => {
-    if (images.length >= MAX_IMAGES) {
-      Alert.alert('Limit Reached', `You can only add up to ${MAX_IMAGES} images`);
+  const pickMedia = async () => {
+    if (media.length >= MAX_MEDIA) {
+      Alert.alert('Limit Reached', `You can only add up to ${MAX_MEDIA} photos/videos`);
       return;
     }
 
     Alert.alert(
-      'Add Photo',
+      'Add Media',
       'Choose an option',
       [
         {
@@ -71,7 +72,26 @@ export default function CreatePostScreen() {
                 quality: 0.8,
               });
               if (!result.canceled && result.assets[0]) {
-                setImages([...images, result.assets[0].uri]);
+                setMedia([...media, { uri: result.assets[0].uri, isVideo: false }]);
+              }
+            } else {
+              Alert.alert('Permission Denied', 'Camera permission is required');
+            }
+          },
+        },
+        {
+          text: 'Record Video',
+          onPress: async () => {
+            const permission = await ImagePicker.requestCameraPermissionsAsync();
+            if (permission.granted) {
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ['videos'],
+                allowsEditing: true,
+                videoMaxDuration: 60, // 60 seconds max
+                videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+              });
+              if (!result.canceled && result.assets[0]) {
+                setMedia([...media, { uri: result.assets[0].uri, isVideo: true }]);
               }
             } else {
               Alert.alert('Permission Denied', 'Camera permission is required');
@@ -84,14 +104,25 @@ export default function CreatePostScreen() {
             const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (permission.granted) {
               const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'],
+                mediaTypes: ['images', 'videos'],
                 allowsMultipleSelection: true,
-                selectionLimit: MAX_IMAGES - images.length,
+                selectionLimit: MAX_MEDIA - media.length,
                 quality: 0.8,
+                videoMaxDuration: 60,
               });
               if (!result.canceled && result.assets) {
-                const newImages = result.assets.map(asset => asset.uri);
-                setImages([...images, ...newImages].slice(0, MAX_IMAGES));
+                const newMedia = result.assets.map(asset => {
+                  // Check both type and file extension for reliable video detection
+                  const ext = asset.uri.split('.').pop()?.toLowerCase() || '';
+                  const videoExtensions = ['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm'];
+                  const isVideo = asset.type === 'video' || videoExtensions.includes(ext);
+                  console.log('📹 Asset:', { uri: asset.uri, type: asset.type, ext, isVideo });
+                  return {
+                    uri: asset.uri,
+                    isVideo,
+                  };
+                });
+                setMedia([...media, ...newMedia].slice(0, MAX_MEDIA));
               }
             } else {
               Alert.alert('Permission Denied', 'Photo library permission is required');
@@ -103,13 +134,13 @@ export default function CreatePostScreen() {
     );
   };
 
-  const removeImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
+  const removeMedia = (index: number) => {
+    setMedia(media.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async () => {
-    if (images.length === 0 && !caption.trim()) {
-      Alert.alert('Empty Post', 'Please add a photo or caption');
+    if (media.length === 0 && !caption.trim()) {
+      Alert.alert('Empty Post', 'Please add a photo, video, or caption');
       return;
     }
 
@@ -127,7 +158,7 @@ export default function CreatePostScreen() {
           temperature: fishingConditions.air_temperature_range,
         } : undefined,
         is_public: isPublic,
-        images: images,
+        media: media,
       });
 
       if (error) {
@@ -171,25 +202,40 @@ export default function CreatePostScreen() {
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {/* Image Picker */}
+        {/* Media Picker (Photos & Videos) */}
         <View style={styles.imageSection}>
-          <Text style={styles.sectionTitle}>Photos</Text>
+          <Text style={styles.sectionTitle}>Photos & Videos</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
-            {images.map((uri, index) => (
+            {media.map((item, index) => (
               <View key={index} style={styles.imageContainer}>
-                <Image source={{ uri }} style={styles.image} />
+                {item.isVideo ? (
+                  <View style={styles.videoContainer}>
+                    <Video
+                      source={{ uri: item.uri }}
+                      style={styles.image}
+                      resizeMode={ResizeMode.COVER}
+                      shouldPlay={false}
+                      isMuted={true}
+                    />
+                    <View style={styles.videoOverlay}>
+                      <Ionicons name="videocam" size={24} color="#fff" />
+                    </View>
+                  </View>
+                ) : (
+                  <Image source={{ uri: item.uri }} style={styles.image} />
+                )}
                 <TouchableOpacity 
                   style={styles.removeImageButton}
-                  onPress={() => removeImage(index)}
+                  onPress={() => removeMedia(index)}
                 >
                   <Ionicons name="close-circle" size={24} color="#ff4444" />
                 </TouchableOpacity>
               </View>
             ))}
-            {images.length < MAX_IMAGES && (
-              <TouchableOpacity style={styles.addImageButton} onPress={pickImages}>
-                <Ionicons name="camera-outline" size={32} color="#ffd33d" />
-                <Text style={styles.addImageText}>Add Photo</Text>
+            {media.length < MAX_MEDIA && (
+              <TouchableOpacity style={styles.addImageButton} onPress={pickMedia}>
+                <Ionicons name="add-circle-outline" size={32} color="#ffd33d" />
+                <Text style={styles.addImageText}>Add Media</Text>
               </TouchableOpacity>
             )}
           </ScrollView>
@@ -367,6 +413,23 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 12,
+  },
+  videoContainer: {
+    position: 'relative',
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  videoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   removeImageButton: {
     position: 'absolute',

@@ -304,14 +304,20 @@ export default function ProfileScreen() {
               ) : (
                 <View style={styles.postsGrid}>
                   {photoPosts.map((post) => {
-                    const firstImage = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
+                    const firstMedia = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
+                    const hasVideo = post.post_images?.some(img => img.is_video);
                     return (
                       <TouchableOpacity 
                         key={post.id}
                         style={styles.postThumbnail}
                         onPress={() => router.push(`/post/${post.id}`)}
                       >
-                        <Image source={{ uri: firstImage?.image_url }} style={styles.thumbnailImage} />
+                        <Image source={{ uri: firstMedia?.image_url }} style={styles.thumbnailImage} />
+                        {hasVideo && (
+                          <View style={styles.videoIndicator}>
+                            <Ionicons name="videocam" size={16} color="#fff" />
+                          </View>
+                        )}
                       </TouchableOpacity>
                     );
                   })}
@@ -610,10 +616,19 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 4,
     overflow: 'hidden',
+    position: 'relative',
   },
   thumbnailImage: {
     width: '100%',
     height: '100%',
+  },
+  videoIndicator: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 4,
+    padding: 4,
   },
   // Post tabs styles
   postTabs: {
