@@ -56,7 +56,7 @@ export default function PostDetailScreen() {
         .from('posts')
         .select(`
           *,
-          post_images (id, image_url, display_order, is_video)
+          post_images (id, image_url, display_order, is_video, thumbnail_url)
         `)
         .eq('id', id)
         .single();

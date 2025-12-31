@@ -1,4 +1,4 @@
-package com.whatfly.fishing
+package com.whatflyfishing.app
 
 import android.app.Application
 import android.content.res.Configuration

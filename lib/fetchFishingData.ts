@@ -2,17 +2,14 @@
  * Fetch Fishing Data Integration
  * 
  * Integrates data from:
- * - Mapbox (for coordinates)
- * - OpenWeatherMap (for weather conditions)
- * - USGS Water Services (for water conditions)
+ * - OpenWeatherMap (for weather conditions) - Direct API call, no backend needed
+ * - USGS Water Services (for water conditions) - Direct API call
+ * - Solunar.org (for moon phase and feeding times) - Direct API call
  * 
- * Refactored to:
- * 1. Find nearest USGS station using Site Service endpoint
- * 2. Fetch weather and water data concurrently
- * 3. Return combined fishing data
+ * All API calls are made directly from the app - no backend server required.
  */
 
-import { API_ENDPOINTS, apiRequest } from './apiConfig';
+import { WEATHER_CONFIG } from './config';
 
 interface WeatherMarker {
   coordinate: [number, number]; // [longitude, latitude]
@@ -72,13 +69,11 @@ interface USGSIVTimeSeries {
  * 
  * @param lat - Latitude
  * @param lng - Longitude
- * @param OWM_API_KEY - OpenWeatherMap API key (optional, uses backend if not provided)
  * @returns Combined fishing data with weather and water conditions
  */
 export async function fetchFishingData(
   lat: number,
-  lng: number,
-  OWM_API_KEY?: string
+  lng: number
 ): Promise<WeatherMarker | null> {
   try {
     console.log(`🎣 Fetching fishing data for: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
@@ -96,7 +91,7 @@ export async function fetchFishingData(
     // --- STEP 2: Conditional Concurrent Fetch ---
     // Create array of API promises
     const promises: Promise<any>[] = [
-      fetchOpenWeatherData(lat, lng, OWM_API_KEY),
+      fetchOpenWeatherData(lat, lng),
       fetchSolunarData(lat, lng) // Always fetch Solunar data
     ];
 
@@ -355,12 +350,12 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
 
 /**
  * STEP 2.1: Fetch OpenWeatherMap Current Weather Data
+ * Calls OpenWeatherMap API directly - no backend required
  * Extracts all high-value weather data fields for fishing reports
  */
 async function fetchOpenWeatherData(
   lat: number,
-  lng: number,
-  apiKey?: string
+  lng: number
 ): Promise<{
   airTemp: number;
   windSpeedMph: number | null;
@@ -376,31 +371,51 @@ async function fetchOpenWeatherData(
   sunset: number | null;
 }> {
   try {
-    let data: any;
-
-    // If no API key provided, use backend API
-    if (!apiKey) {
-      data = await apiRequest<any>(API_ENDPOINTS.weather.current(lat, lng));
-    } else {
-      // Direct OpenWeatherMap API call
-      const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}&units=metric`;
-      
-      console.log('🌤️ Fetching OpenWeatherMap data...');
-
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`OpenWeatherMap API error: ${response.status} ${response.statusText}`);
-      }
-
-      data = await response.json();
+    // Check if OpenWeatherMap API key is configured
+    if (!WEATHER_CONFIG.isConfigured) {
+      console.warn('⚠️ OpenWeatherMap API key not configured. Add EXPO_PUBLIC_OPENWEATHERMAP_API_KEY to your .env file.');
+      console.warn('   Get a free API key from: https://openweathermap.org/api');
+      // Return default values instead of failing
+      return {
+        airTemp: 0,
+        windSpeedMph: null,
+        windGustMph: null,
+        windDirectionDeg: null,
+        barometricPressureHpa: null,
+        cloudCoverPercent: null,
+        weatherDescription: 'Weather data unavailable - API key not configured',
+        weatherIcon: '02d',
+        precipitationRainMm: null,
+        precipitationSnowMm: null,
+        sunrise: null,
+        sunset: null,
+      };
     }
 
+    // Direct OpenWeatherMap API call
+    const url = `${WEATHER_CONFIG.baseUrl}/weather?lat=${lat}&lon=${lng}&appid=${WEATHER_CONFIG.apiKey}&units=metric`;
+    
+    console.log('🌤️ Fetching OpenWeatherMap data directly...');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.error(`❌ OpenWeatherMap API error: ${response.status} ${response.statusText}`);
+      console.error(`   Response: ${errorText.substring(0, 200)}`);
+      throw new Error(`OpenWeatherMap API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
     // Extract all weather data fields from OpenWeatherMap response
-    // Handle both direct OWM API response and backend API response formats
     
     // 1. Air Temperature (°C)
-    const airTemp = data.main?.temp ?? data.temperature ?? null;
+    const airTemp = data.main?.temp ?? null;
     
     // 2. Wind Speed (m/s from OWM, convert to mph)
     const windSpeedMs = data.wind?.speed ?? null;
@@ -421,32 +436,26 @@ async function fetchOpenWeatherData(
     
     // 7. Weather Description
     const weatherDescription = data.weather?.[0]?.description ?? 
-                              data.weather_description ?? 
-                              data.weather?.[0]?.main ??
-                              data.weather_condition ?? 
+                              data.weather?.[0]?.main ?? 
                               'Unknown';
     
     // 8. Weather Icon
     const weatherIcon = data.weather?.[0]?.icon ?? 
-                       getWeatherIconCode(data.weather?.[0]?.main ?? data.weather_condition ?? '');
+                       getWeatherIconCode(data.weather?.[0]?.main ?? '');
     
     // 9. Precipitation - Rain (mm, 1h)
-    const precipitationRainMm = data.rain?.['1h'] ?? 
-                                data.rain?.oneHour ?? 
-                                data.precipitation_rain ?? 
-                                null;
+    const precipitationRainMm = data.rain?.['1h'] ?? null;
     
     // 10. Precipitation - Snow (mm, 1h)
-    const precipitationSnowMm = data.snow?.['1h'] ?? 
-                               data.snow?.oneHour ?? 
-                               data.precipitation_snow ?? 
-                               null;
+    const precipitationSnowMm = data.snow?.['1h'] ?? null;
     
     // 11. Sunrise (Unix timestamp)
     const sunrise = data.sys?.sunrise ?? null;
     
     // 12. Sunset (Unix timestamp)
     const sunset = data.sys?.sunset ?? null;
+
+    console.log('✅ OpenWeatherMap data fetched successfully');
 
     return {
       airTemp: airTemp !== null ? parseFloat(airTemp.toFixed(1)) : 0,
@@ -463,8 +472,12 @@ async function fetchOpenWeatherData(
       sunset,
     };
 
-  } catch (error) {
-    console.error('❌ Error fetching weather data:', error);
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.warn('⚠️ OpenWeatherMap API request timed out after 10 seconds');
+    } else {
+      console.error('❌ Error fetching weather data:', error);
+    }
     throw error;
   }
 }

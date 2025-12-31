@@ -12,6 +12,16 @@ export const SUPABASE_CONFIG = {
   anonKey: SUPABASE_ANON_KEY,
 };
 
+// OpenWeatherMap API Configuration
+// Get your free API key from: https://openweathermap.org/api
+const OWM_API_KEY = process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY;
+
+export const WEATHER_CONFIG = {
+  apiKey: OWM_API_KEY || '',
+  baseUrl: 'https://api.openweathermap.org/data/2.5',
+  isConfigured: !!OWM_API_KEY,
+};
+
 // Sample flies data for initial database population
 export const SAMPLE_FLIES = [
   {

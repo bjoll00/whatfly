@@ -1,4 +1,4 @@
-package com.whatfly.fishing
+package com.whatflyfishing.app
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

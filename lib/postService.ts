@@ -2,6 +2,14 @@ import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from './supabase';
 
+// Lazy import VideoThumbnails to prevent crash if native module isn't available
+let VideoThumbnails: typeof import('expo-video-thumbnails') | null = null;
+try {
+  VideoThumbnails = require('expo-video-thumbnails');
+} catch (e) {
+  console.warn('expo-video-thumbnails not available - video thumbnails will be disabled');
+}
+
 // Types
 export interface Post {
   id: string;
@@ -34,6 +42,7 @@ export interface PostImage {
   display_order: number;
   created_at: string;
   is_video?: boolean;
+  thumbnail_url?: string | null;
 }
 
 export interface Comment {
@@ -103,14 +112,80 @@ async function uploadPostImage(uri: string, postId: string, index: number): Prom
   }
 }
 
+// Generate thumbnail from video
+async function generateVideoThumbnail(videoUri: string): Promise<string | null> {
+  // Check if VideoThumbnails module is available
+  if (!VideoThumbnails) {
+    console.log('📸 VideoThumbnails not available - skipping thumbnail generation');
+    return null;
+  }
+  
+  try {
+    const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, {
+      time: 1000, // Get frame at 1 second
+      quality: 0.7,
+    });
+    return uri;
+  } catch (error) {
+    console.error('Error generating video thumbnail:', error);
+    return null;
+  }
+}
+
+// Upload thumbnail image to Supabase storage
+async function uploadThumbnail(uri: string, postId: string, index: number): Promise<string | null> {
+  try {
+    const fileName = `${postId}/${Date.now()}-${index}-thumb.jpg`;
+
+    // Read the file as base64
+    const base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: 'base64',
+    });
+
+    // Upload to Supabase storage
+    const { error: uploadError } = await supabase.storage
+      .from('post-images')
+      .upload(fileName, decode(base64), {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('Thumbnail upload error:', uploadError);
+      return null;
+    }
+
+    // Get the public URL
+    const { data: urlData } = supabase.storage
+      .from('post-images')
+      .getPublicUrl(fileName);
+
+    return urlData?.publicUrl || null;
+  } catch (error) {
+    console.error('Error uploading thumbnail:', error);
+    return null;
+  }
+}
+
 // Upload video to Supabase storage
-async function uploadPostVideo(uri: string, postId: string, index: number): Promise<string | null> {
+async function uploadPostVideo(uri: string, postId: string, index: number): Promise<{ videoUrl: string | null; thumbnailUrl: string | null }> {
   try {
     const ext = uri.split('.').pop()?.toLowerCase() || 'mp4';
     const contentType = `video/${ext === 'mov' ? 'quicktime' : ext}`;
     const fileName = `${postId}/${Date.now()}-${index}.${ext}`;
 
-    // Read the file as base64
+    // Generate thumbnail first (before any uploads)
+    console.log('📸 Generating video thumbnail...');
+    const thumbnailUri = await generateVideoThumbnail(uri);
+    let thumbnailUrl: string | null = null;
+    
+    if (thumbnailUri) {
+      console.log('📤 Uploading thumbnail...');
+      thumbnailUrl = await uploadThumbnail(thumbnailUri, postId, index);
+    }
+
+    // Read the video file as base64
+    console.log('📤 Uploading video...');
     const base64 = await FileSystem.readAsStringAsync(uri, {
       encoding: 'base64',
     });
@@ -125,7 +200,7 @@ async function uploadPostVideo(uri: string, postId: string, index: number): Prom
 
     if (uploadError) {
       console.error('Video upload error:', uploadError);
-      return null;
+      return { videoUrl: null, thumbnailUrl };
     }
 
     // Get the public URL
@@ -133,10 +208,14 @@ async function uploadPostVideo(uri: string, postId: string, index: number): Prom
       .from('post-images')
       .getPublicUrl(fileName);
 
-    return urlData?.publicUrl || null;
+    console.log('✅ Video uploaded successfully');
+    return { 
+      videoUrl: urlData?.publicUrl || null, 
+      thumbnailUrl 
+    };
   } catch (error) {
     console.error('Error uploading post video:', error);
-    return null;
+    return { videoUrl: null, thumbnailUrl: null };
   }
 }
 
@@ -168,19 +247,36 @@ export async function createPost(userId: string, input: CreatePostInput): Promis
     if (input.media && input.media.length > 0) {
       for (let i = 0; i < input.media.length; i++) {
         const mediaItem = input.media[i];
-        const mediaUrl = mediaItem.isVideo 
-          ? await uploadPostVideo(mediaItem.uri, post.id, i)
-          : await uploadPostImage(mediaItem.uri, post.id, i);
         
-        if (mediaUrl) {
-          await supabase
-            .from('post_images')
-            .insert({
-              post_id: post.id,
-              image_url: mediaUrl,
-              display_order: i,
-              is_video: mediaItem.isVideo,
-            });
+        if (mediaItem.isVideo) {
+          // Upload video with thumbnail
+          const { videoUrl, thumbnailUrl } = await uploadPostVideo(mediaItem.uri, post.id, i);
+          
+          if (videoUrl) {
+            await supabase
+              .from('post_images')
+              .insert({
+                post_id: post.id,
+                image_url: videoUrl,
+                display_order: i,
+                is_video: true,
+                thumbnail_url: thumbnailUrl,
+              });
+          }
+        } else {
+          // Upload image
+          const imageUrl = await uploadPostImage(mediaItem.uri, post.id, i);
+          
+          if (imageUrl) {
+            await supabase
+              .from('post_images')
+              .insert({
+                post_id: post.id,
+                image_url: imageUrl,
+                display_order: i,
+                is_video: false,
+              });
+          }
         }
       }
     } else if (input.images && input.images.length > 0) {
@@ -216,7 +312,7 @@ export async function getFeedPosts(limit: number = 20, offset: number = 0): Prom
       .from('posts')
       .select(`
         *,
-        post_images (id, image_url, display_order, is_video)
+        post_images (id, image_url, display_order, is_video, thumbnail_url)
       `)
       .eq('is_public', true)
       .order('created_at', { ascending: false })
@@ -274,7 +370,7 @@ export async function getUserPosts(userId: string, limit: number = 20, offset: n
       .from('posts')
       .select(`
         *,
-        post_images (id, image_url, display_order, is_video)
+        post_images (id, image_url, display_order, is_video, thumbnail_url)
       `)
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
@@ -521,5 +617,129 @@ export async function getFollowCounts(userId: string): Promise<{ followers: numb
   } catch (error) {
     console.error('Error getting follow counts:', error);
     return { followers: 0, following: 0 };
+  }
+}
+
+// Follower/Following user profile type
+export interface FollowUser {
+  id: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  isFollowing?: boolean; // Whether the current user is following this user
+}
+
+// Get list of users who follow a user (followers)
+export async function getFollowers(userId: string, currentUserId?: string): Promise<FollowUser[]> {
+  try {
+    // Get all follower relationships where this user is being followed
+    const { data: follows, error } = await supabase
+      .from('follows')
+      .select('follower_id')
+      .eq('following_id', userId);
+
+    if (error) {
+      console.error('Error fetching followers:', error);
+      return [];
+    }
+
+    if (!follows || follows.length === 0) {
+      return [];
+    }
+
+    // Get the follower user IDs
+    const followerIds = follows.map(f => f.follower_id);
+
+    // Fetch profiles for these users
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, username, display_name, avatar_url')
+      .in('id', followerIds);
+
+    if (profilesError) {
+      console.error('Error fetching follower profiles:', profilesError);
+      return [];
+    }
+
+    // If current user is provided, check which followers they're following back
+    let followingSet = new Set<string>();
+    if (currentUserId) {
+      const { data: currentUserFollowing } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', currentUserId)
+        .in('following_id', followerIds);
+      
+      if (currentUserFollowing) {
+        followingSet = new Set(currentUserFollowing.map(f => f.following_id));
+      }
+    }
+
+    return (profiles || []).map(profile => ({
+      ...profile,
+      isFollowing: followingSet.has(profile.id),
+    }));
+  } catch (error) {
+    console.error('Error in getFollowers:', error);
+    return [];
+  }
+}
+
+// Get list of users that a user follows (following)
+export async function getFollowing(userId: string, currentUserId?: string): Promise<FollowUser[]> {
+  try {
+    // Get all following relationships where this user is following others
+    const { data: follows, error } = await supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', userId);
+
+    if (error) {
+      console.error('Error fetching following:', error);
+      return [];
+    }
+
+    if (!follows || follows.length === 0) {
+      return [];
+    }
+
+    // Get the following user IDs
+    const followingIds = follows.map(f => f.following_id);
+
+    // Fetch profiles for these users
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, username, display_name, avatar_url')
+      .in('id', followingIds);
+
+    if (profilesError) {
+      console.error('Error fetching following profiles:', profilesError);
+      return [];
+    }
+
+    // If current user is provided and different from userId, check which they're following
+    let followingSet = new Set<string>();
+    if (currentUserId && currentUserId !== userId) {
+      const { data: currentUserFollowing } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', currentUserId)
+        .in('following_id', followingIds);
+      
+      if (currentUserFollowing) {
+        followingSet = new Set(currentUserFollowing.map(f => f.following_id));
+      }
+    } else if (currentUserId === userId) {
+      // If viewing own following list, all are being followed
+      followingSet = new Set(followingIds);
+    }
+
+    return (profiles || []).map(profile => ({
+      ...profile,
+      isFollowing: followingSet.has(profile.id),
+    }));
+  } catch (error) {
+    console.error('Error in getFollowing:', error);
+    return [];
   }
 }

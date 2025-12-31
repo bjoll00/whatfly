@@ -10,6 +10,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import FollowersModal from '../../components/FollowersModal';
 import { useAuth } from '../../lib/AuthContext';
 import {
     followUser,
@@ -42,6 +43,8 @@ export default function UserProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [activePostTab, setActivePostTab] = useState<'photos' | 'thoughts'>('photos');
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
 
   // Filter posts into photos (with images) and thoughts (without images)
   const photoPosts = posts.filter(post => post.post_images && post.post_images.length > 0);
@@ -195,7 +198,7 @@ export default function UserProfileScreen() {
                 style={styles.messageButton}
                 onPress={() => router.push(`/conversation/${id}`)}
               >
-                <Ionicons name="chatbubble-outline" size={20} color="#ffd33d" />
+                <Ionicons name="chatbubble-outline" size={18} color="#ffd33d" />
                 <Text style={styles.messageButtonText}>Message</Text>
               </TouchableOpacity>
             </View>
@@ -219,15 +222,27 @@ export default function UserProfileScreen() {
             <Text style={styles.statLabel}>Posts</Text>
           </View>
           <View style={styles.statDivider} />
-          <View style={styles.statItem}>
+          <TouchableOpacity 
+            style={styles.statItem}
+            onPress={() => {
+              setFollowersModalTab('followers');
+              setShowFollowersModal(true);
+            }}
+          >
             <Text style={styles.statValue}>{followCounts.followers}</Text>
             <Text style={styles.statLabel}>Followers</Text>
-          </View>
+          </TouchableOpacity>
           <View style={styles.statDivider} />
-          <View style={styles.statItem}>
+          <TouchableOpacity 
+            style={styles.statItem}
+            onPress={() => {
+              setFollowersModalTab('following');
+              setShowFollowersModal(true);
+            }}
+          >
             <Text style={styles.statValue}>{followCounts.following}</Text>
             <Text style={styles.statLabel}>Following</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Posts Section */}
@@ -274,14 +289,48 @@ export default function UserProfileScreen() {
             ) : (
               <View style={styles.postsGrid}>
                 {photoPosts.map((post) => {
-                  const firstImage = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
+                  const sortedMedia = post.post_images?.sort((a, b) => a.display_order - b.display_order) || [];
+                  const firstMedia = sortedMedia[0];
+                  const hasVideo = sortedMedia.some(img => img.is_video);
+                  
+                  // Determine the best thumbnail to show:
+                  // 1. If first media is a video with a thumbnail, use that
+                  // 2. If first media is an image, use that
+                  // 3. Find any image in the post
+                  // 4. Fall back to placeholder
+                  let thumbnailUrl: string | null = null;
+                  
+                  if (firstMedia?.is_video && firstMedia?.thumbnail_url) {
+                    // Video with generated thumbnail
+                    thumbnailUrl = firstMedia.thumbnail_url;
+                  } else if (!firstMedia?.is_video && firstMedia?.image_url) {
+                    // First media is an image
+                    thumbnailUrl = firstMedia.image_url;
+                  } else {
+                    // Find any image in the post
+                    const anyImage = sortedMedia.find(img => !img.is_video);
+                    thumbnailUrl = anyImage?.image_url || null;
+                  }
+                  
                   return (
                     <TouchableOpacity 
                       key={post.id}
                       style={styles.postThumbnail}
                       onPress={() => router.push(`/post/${post.id}`)}
                     >
-                      <Image source={{ uri: firstImage?.image_url }} style={styles.thumbnailImage} />
+                      {thumbnailUrl ? (
+                        <Image source={{ uri: thumbnailUrl }} style={styles.thumbnailImage} />
+                      ) : (
+                        // No thumbnail available, show placeholder
+                        <View style={styles.videoThumbnailPlaceholder}>
+                          <Ionicons name="play-circle" size={40} color="#ffd33d" />
+                        </View>
+                      )}
+                      {hasVideo && (
+                        <View style={styles.videoIndicator}>
+                          <Ionicons name="videocam" size={16} color="#fff" />
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -320,6 +369,18 @@ export default function UserProfileScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Followers/Following Modal */}
+      {id && (
+        <FollowersModal
+          visible={showFollowersModal}
+          onClose={() => setShowFollowersModal(false)}
+          userId={id}
+          initialTab={followersModalTab}
+          followerCount={followCounts.followers}
+          followingCount={followCounts.following}
+        />
+      )}
     </View>
   );
 }
@@ -447,6 +508,29 @@ const styles = StyleSheet.create({
   followingButtonText: {
     color: '#ffd33d',
   },
+  profileActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  messageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#ffd33d',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+    minWidth: 120,
+    gap: 8,
+  },
+  messageButtonText: {
+    color: '#ffd33d',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -516,6 +600,7 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 4,
     overflow: 'hidden',
+    position: 'relative',
   },
   thumbnailImage: {
     width: '100%',
@@ -527,6 +612,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#3a3a3a',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  videoThumbnailPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1a1d21',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoIndicator: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 4,
+    padding: 4,
   },
   // Post tabs styles
   postTabs: {

@@ -13,6 +13,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import FollowersModal from '../../components/FollowersModal';
 import { useAuth } from '../../lib/AuthContext';
 import { getFollowCounts, getUserPosts, Post } from '../../lib/postService';
 
@@ -22,6 +23,8 @@ export default function ProfileScreen() {
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
   const [activePostTab, setActivePostTab] = useState<'photos' | 'thoughts'>('photos');
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
 
   // Filter posts into photos (with images) and thoughts (without images)
   const photoPosts = posts.filter(post => post.post_images && post.post_images.length > 0);
@@ -236,15 +239,27 @@ export default function ProfileScreen() {
               <Text style={styles.statLabel}>Posts</Text>
             </View>
             <View style={styles.statDivider} />
-            <View style={styles.statItem}>
+            <TouchableOpacity 
+              style={styles.statItem}
+              onPress={() => {
+                setFollowersModalTab('followers');
+                setShowFollowersModal(true);
+              }}
+            >
               <Text style={styles.statValue}>{followCounts.followers}</Text>
               <Text style={styles.statLabel}>Followers</Text>
-            </View>
+            </TouchableOpacity>
             <View style={styles.statDivider} />
-            <View style={styles.statItem}>
+            <TouchableOpacity 
+              style={styles.statItem}
+              onPress={() => {
+                setFollowersModalTab('following');
+                setShowFollowersModal(true);
+              }}
+            >
               <Text style={styles.statValue}>{followCounts.following}</Text>
               <Text style={styles.statLabel}>Following</Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           {/* My Posts Section */}
@@ -304,15 +319,43 @@ export default function ProfileScreen() {
               ) : (
                 <View style={styles.postsGrid}>
                   {photoPosts.map((post) => {
-                    const firstMedia = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
-                    const hasVideo = post.post_images?.some(img => img.is_video);
+                    const sortedMedia = post.post_images?.sort((a, b) => a.display_order - b.display_order) || [];
+                    const firstMedia = sortedMedia[0];
+                    const hasVideo = sortedMedia.some(img => img.is_video);
+                    
+                    // Determine the best thumbnail to show:
+                    // 1. If first media is a video with a thumbnail, use that
+                    // 2. If first media is an image, use that
+                    // 3. Find any image in the post
+                    // 4. Fall back to placeholder
+                    let thumbnailUrl: string | null = null;
+                    
+                    if (firstMedia?.is_video && firstMedia?.thumbnail_url) {
+                      // Video with generated thumbnail
+                      thumbnailUrl = firstMedia.thumbnail_url;
+                    } else if (!firstMedia?.is_video && firstMedia?.image_url) {
+                      // First media is an image
+                      thumbnailUrl = firstMedia.image_url;
+                    } else {
+                      // Find any image in the post
+                      const anyImage = sortedMedia.find(img => !img.is_video);
+                      thumbnailUrl = anyImage?.image_url || null;
+                    }
+                    
                     return (
                       <TouchableOpacity 
                         key={post.id}
                         style={styles.postThumbnail}
                         onPress={() => router.push(`/post/${post.id}`)}
                       >
-                        <Image source={{ uri: firstMedia?.image_url }} style={styles.thumbnailImage} />
+                        {thumbnailUrl ? (
+                          <Image source={{ uri: thumbnailUrl }} style={styles.thumbnailImage} />
+                        ) : (
+                          // No thumbnail available, show placeholder
+                          <View style={styles.videoThumbnailPlaceholder}>
+                            <Ionicons name="play-circle" size={40} color="#ffd33d" />
+                          </View>
+                        )}
                         {hasVideo && (
                           <View style={styles.videoIndicator}>
                             <Ionicons name="videocam" size={16} color="#fff" />
@@ -364,6 +407,18 @@ export default function ProfileScreen() {
 
         </View>
       </ScrollView>
+
+      {/* Followers/Following Modal */}
+      {user && (
+        <FollowersModal
+          visible={showFollowersModal}
+          onClose={() => setShowFollowersModal(false)}
+          userId={user.id}
+          initialTab={followersModalTab}
+          followerCount={followCounts.followers}
+          followingCount={followCounts.following}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -621,6 +676,13 @@ const styles = StyleSheet.create({
   thumbnailImage: {
     width: '100%',
     height: '100%',
+  },
+  videoThumbnailPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1a1d21',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   videoIndicator: {
     position: 'absolute',
