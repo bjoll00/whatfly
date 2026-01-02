@@ -112,36 +112,11 @@ export default function CreatePostScreen() {
               });
               if (!result.canceled && result.assets) {
                 const newMedia = result.assets.map(asset => {
-                  // Multiple checks for reliable video detection (especially for iOS Simulator)
-                  const uri = asset.uri;
-                  const ext = uri.split('.').pop()?.toLowerCase() || '';
-                  const videoExtensions = ['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm', '3gp'];
-                  
-                  // Check mimeType first (most reliable when available)
-                  const mimeType = (asset as any).mimeType || '';
-                  const isMimeTypeVideo = mimeType.startsWith('video/');
-                  
-                  // Check asset.type
-                  const isTypeVideo = asset.type === 'video';
-                  
-                  // Check file extension
-                  const isExtVideo = videoExtensions.includes(ext);
-                  
-                  // Check if duration exists (videos have duration, images don't)
-                  const hasDuration = (asset as any).duration && (asset as any).duration > 0;
-                  
-                  const isVideo = isMimeTypeVideo || isTypeVideo || isExtVideo || hasDuration;
-                  
-                  console.log('📹 Asset picked:', { 
-                    uri: uri.substring(uri.length - 50), // Last 50 chars for readability
-                    type: asset.type,
-                    mimeType,
-                    ext, 
-                    duration: (asset as any).duration,
-                    isVideo,
-                    checks: { isMimeTypeVideo, isTypeVideo, isExtVideo, hasDuration }
-                  });
-                  
+                  // Check both type and file extension for reliable video detection
+                  const ext = asset.uri.split('.').pop()?.toLowerCase() || '';
+                  const videoExtensions = ['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm'];
+                  const isVideo = asset.type === 'video' || videoExtensions.includes(ext);
+                  console.log('📹 Asset:', { uri: asset.uri, type: asset.type, ext, isVideo });
                   return {
                     uri: asset.uri,
                     isVideo,

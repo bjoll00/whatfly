@@ -116,78 +116,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
+    let hasInitialized = false;
     
-    // Listen for auth changes - this is the primary way to get session state
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
-      
-      console.log('AuthContext: Auth state changed:', event, session?.user?.id);
-      
-      // Update user state immediately
-      setUser(session?.user ?? null);
-      
-      // Handle different auth events
-      if (session?.user) {
-        setIsGuest(false);
-        storage.removeItem(GUEST_MODE_KEY).catch(() => {});
-        
-        // Load profile in background (don't block loading state)
-        loadProfile(session.user.id).catch((e) => {
-          console.error('AuthContext: Profile load error:', e);
-        });
-      } else {
-        setProfile(null);
-        setNeedsUsername(false);
-      }
-      
-      // Set loading to false after handling the event
-      if (isMounted) {
-        setLoading(false);
-      }
-    });
-
-    // Also try to get the initial session explicitly
-    // This ensures we restore the session even if onAuthStateChange doesn't fire immediately
-    const initSession = async () => {
+    // Get initial session with timeout
+    const initAuth = async () => {
       try {
-        console.log('AuthContext: Checking for existing session...');
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // Add timeout for getSession to prevent hanging
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) => 
+          setTimeout(() => resolve({ data: { session: null } }), 5000)
+        );
         
-        if (error) {
-          console.error('AuthContext: Error getting session:', error);
-        }
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
         
         if (!isMounted) return;
+        hasInitialized = true;
         
+        setUser(session?.user ?? null);
+        
+        // Load profile if user exists (with timeout)
         if (session?.user) {
-          console.log('AuthContext: Found existing session for user:', session.user.id);
-          setUser(session.user);
-          setIsGuest(false);
-          
-          // Load profile
           try {
-            await loadProfile(session.user.id);
+            await Promise.race([
+              loadProfile(session.user.id),
+              new Promise<void>((resolve) => setTimeout(resolve, 5000))
+            ]);
           } catch (e) {
-            console.error('AuthContext: Profile load error:', e);
+            // Profile load failed, continue anyway
           }
-        } else {
-          console.log('AuthContext: No existing session found');
-        }
-        
-        if (isMounted) {
-          setLoading(false);
         }
       } catch (error) {
-        console.error('AuthContext: Session init error:', error);
+        console.error('Auth init error:', error);
+      } finally {
         if (isMounted) {
           setLoading(false);
         }
       }
     };
     
-    initSession();
+    initAuth();
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+      
+      // Skip INITIAL_SESSION if we already initialized
+      if (event === 'INITIAL_SESSION' && hasInitialized) return;
+      
+      // Mark as initialized if this is the first event
+      if (event === 'INITIAL_SESSION') {
+        hasInitialized = true;
+      }
+      
+      setLoading(true);
+      setUser(session?.user ?? null);
+      
+      // Handle user sign in
+      if (session?.user) {
+        setIsGuest(false);
+        storage.removeItem(GUEST_MODE_KEY).catch(() => {});
+        // Wait for profile load with timeout
+        try {
+          await Promise.race([
+            loadProfile(session.user.id),
+            new Promise<void>((resolve) => setTimeout(resolve, 5000))
+          ]);
+        } catch (e) {
+          // Profile load failed, continue anyway
+        }
+      } else {
+        setProfile(null);
+        setNeedsUsername(false);
+      }
+      
+      if (isMounted) {
+        setLoading(false);
+      }
+    });
 
     return () => {
       isMounted = false;

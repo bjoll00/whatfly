@@ -1,11 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Dimensions,
     FlatList,
     Image,
     RefreshControl,
@@ -15,9 +13,7 @@ import {
     View,
 } from 'react-native';
 import { useAuth } from '../../lib/AuthContext';
-import { deletePost, getFeedPosts, hasUserLikedPost, likePost, Post, PostImage, unlikePost } from '../../lib/postService';
-
-const { width: screenWidth } = Dimensions.get('window');
+import { deletePost, getFeedPosts, hasUserLikedPost, likePost, Post, unlikePost } from '../../lib/postService';
 
 export default function FeedScreen() {
   const { user } = useAuth();
@@ -205,7 +201,7 @@ export default function FeedScreen() {
           </View>
         </View>
 
-        {/* Images and Videos */}
+        {/* Images */}
         {images.length > 0 && (
           <FlatList
             data={images}
@@ -213,25 +209,8 @@ export default function FeedScreen() {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             keyExtractor={(img) => img.id}
-            renderItem={({ item: img }: { item: PostImage }) => (
-              img.is_video ? (
-                <View style={styles.videoWrapper}>
-                  <Video
-                    source={{ uri: img.image_url }}
-                    style={styles.postVideo}
-                    resizeMode={ResizeMode.COVER}
-                    useNativeControls
-                    shouldPlay={false}
-                    isLooping={false}
-                    isMuted={true}
-                  />
-                  <View style={styles.videoIndicator}>
-                    <Ionicons name="videocam" size={16} color="#fff" />
-                  </View>
-                </View>
-              ) : (
-                <Image source={{ uri: img.image_url }} style={styles.postImage} />
-              )
+            renderItem={({ item: img }) => (
+              <Image source={{ uri: img.image_url }} style={styles.postImage} />
             )}
             style={styles.imageList}
           />
@@ -385,10 +364,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   postCard: {
-    backgroundColor: '#25292e',
-    marginTop: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: '#3a3a3a',
+    backgroundColor: '#3a3a3a',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   postHeader: {
     flexDirection: 'row',
@@ -445,28 +425,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   postImage: {
-    width: screenWidth,
-    height: screenWidth, // Square like Instagram
+    width: 380,
+    height: 300,
     resizeMode: 'cover',
-  },
-  videoWrapper: {
-    width: screenWidth,
-    height: screenWidth, // Square like Instagram
-    backgroundColor: '#000',
-    position: 'relative',
-  },
-  postVideo: {
-    width: screenWidth,
-    height: screenWidth,
-  },
-  videoIndicator: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 4,
-    padding: 4,
-    paddingHorizontal: 8,
   },
   caption: {
     color: '#fff',

@@ -1,5 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useAuth } from '../lib/AuthContext';
@@ -49,33 +48,7 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
   const [suggestions, setSuggestions] = useState<FlySuggestion[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
-  const [showTooltip, setShowTooltip] = useState(false);
   const mapRef = useRef<any>(null);
-
-  // Show tooltip hint on first visit
-  useEffect(() => {
-    const checkFirstVisit = async () => {
-      try {
-        const hasSeenTooltip = await AsyncStorage.getItem('hasSeenMapTooltip');
-        if (!hasSeenTooltip) {
-          setShowTooltip(true);
-        }
-      } catch (error) {
-        // If AsyncStorage fails, show tooltip anyway
-        setShowTooltip(true);
-      }
-    };
-    checkFirstVisit();
-  }, []);
-
-  const dismissTooltip = async () => {
-    setShowTooltip(false);
-    try {
-      await AsyncStorage.setItem('hasSeenMapTooltip', 'true');
-    } catch (error) {
-      console.log('Could not save tooltip preference');
-    }
-  };
 
   const handleMapPress = async (event: any) => {
     // Mapbox onPress event structure: { geometry: { coordinates: [longitude, latitude] } }
@@ -258,21 +231,6 @@ export default function FishingMap({ onLocationSelect }: FishingMapProps) {
           </Mapbox.PointAnnotation>
         )}
       </Mapbox.MapView>
-
-      {/* Tooltip Hint - Shows on first visit */}
-      {showTooltip && !selectedCoordinates && (
-        <View style={styles.tooltipContainer}>
-          <View style={styles.tooltip}>
-            <Text style={styles.tooltipTitle}>Tap the Map</Text>
-            <Text style={styles.tooltipText}>
-              Tap anywhere on the map to get weather and water conditions, then get personalized fly suggestions for that location.
-            </Text>
-            <TouchableOpacity style={styles.tooltipButton} onPress={dismissTooltip}>
-              <Text style={styles.tooltipButtonText}>Got it</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
 
       {/* Loading Indicator - Only show when fetching fishing data */}
       {isLoading && (
@@ -626,51 +584,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   suggestionsButtonText: {
-    color: '#25292e',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  tooltipContainer: {
-    position: 'absolute',
-    top: 100,
-    left: 20,
-    right: 20,
-    alignItems: 'center',
-  },
-  tooltip: {
-    backgroundColor: 'rgba(37, 41, 46, 0.95)',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#ffd33d',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  tooltipTitle: {
-    color: '#ffd33d',
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  tooltipText: {
-    color: '#fff',
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  tooltipButton: {
-    backgroundColor: '#ffd33d',
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    alignSelf: 'center',
-  },
-  tooltipButtonText: {
     color: '#25292e',
     fontSize: 16,
     fontWeight: 'bold',

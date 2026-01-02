@@ -1,5 +1,6 @@
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const OPENWEATHERMAP_API_KEY = process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
@@ -12,14 +13,10 @@ export const SUPABASE_CONFIG = {
   anonKey: SUPABASE_ANON_KEY,
 };
 
-// OpenWeatherMap API Configuration
-// Get your free API key from: https://openweathermap.org/api
-const OWM_API_KEY = process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY;
-
+// OpenWeatherMap API configuration
 export const WEATHER_CONFIG = {
-  apiKey: OWM_API_KEY || '',
-  baseUrl: 'https://api.openweathermap.org/data/2.5',
-  isConfigured: !!OWM_API_KEY,
+  apiKey: OPENWEATHERMAP_API_KEY || '',
+  hasApiKey: !!OPENWEATHERMAP_API_KEY,
 };
 
 // Sample flies data for initial database population

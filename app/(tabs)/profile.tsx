@@ -15,14 +15,22 @@ import {
 } from 'react-native';
 import FollowersModal from '../../components/FollowersModal';
 import { useAuth } from '../../lib/AuthContext';
+import { Catch, getCatchStats, getUserCatches } from '../../lib/catchService';
 import { getFollowCounts, getUserPosts, Post } from '../../lib/postService';
 
 export default function ProfileScreen() {
   const { user, profile, needsUsername } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
+  const [catches, setCatches] = useState<Catch[]>([]);
+  const [catchStats, setCatchStats] = useState<{
+    totalCatches: number;
+    speciesCount: number;
+    topSpecies: string | null;
+    largestCatch: { species: string; length: number; weight: number } | null;
+  }>({ totalCatches: 0, speciesCount: 0, topSpecies: null, largestCatch: null });
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
-  const [activePostTab, setActivePostTab] = useState<'photos' | 'thoughts'>('photos');
+  const [activePostTab, setActivePostTab] = useState<'photos' | 'thoughts' | 'catches'>('photos');
   const [showFollowersModal, setShowFollowersModal] = useState(false);
   const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
 
@@ -43,17 +51,26 @@ export default function ProfileScreen() {
     if (!user) return;
     setIsLoadingPosts(true);
     try {
-      const [userPosts, counts] = await Promise.all([
+      const [userPosts, counts, userCatches, stats] = await Promise.all([
         getUserPosts(user.id),
         getFollowCounts(user.id),
+        getUserCatches(user.id),
+        getCatchStats(user.id),
       ]);
       setPosts(userPosts);
       setFollowCounts(counts);
+      setCatches(userCatches);
+      setCatchStats(stats);
     } catch (error) {
       console.error('Error loading user data:', error);
     } finally {
       setIsLoadingPosts(false);
     }
+  };
+
+  const openFollowersModal = (tab: 'followers' | 'following') => {
+    setFollowersModalTab(tab);
+    setShowFollowersModal(true);
   };
 
   const openSupportEmail = (issue?: string) => {
@@ -239,24 +256,12 @@ export default function ProfileScreen() {
               <Text style={styles.statLabel}>Posts</Text>
             </View>
             <View style={styles.statDivider} />
-            <TouchableOpacity 
-              style={styles.statItem}
-              onPress={() => {
-                setFollowersModalTab('followers');
-                setShowFollowersModal(true);
-              }}
-            >
+            <TouchableOpacity style={styles.statItem} onPress={() => openFollowersModal('followers')}>
               <Text style={styles.statValue}>{followCounts.followers}</Text>
               <Text style={styles.statLabel}>Followers</Text>
             </TouchableOpacity>
             <View style={styles.statDivider} />
-            <TouchableOpacity 
-              style={styles.statItem}
-              onPress={() => {
-                setFollowersModalTab('following');
-                setShowFollowersModal(true);
-              }}
-            >
+            <TouchableOpacity style={styles.statItem} onPress={() => openFollowersModal('following')}>
               <Text style={styles.statValue}>{followCounts.following}</Text>
               <Text style={styles.statLabel}>Following</Text>
             </TouchableOpacity>
@@ -279,11 +284,11 @@ export default function ProfileScreen() {
               >
                 <Ionicons 
                   name="images-outline" 
-                  size={20} 
+                  size={18} 
                   color={activePostTab === 'photos' ? '#ffd33d' : '#666'} 
                 />
                 <Text style={[styles.postTabText, activePostTab === 'photos' && styles.postTabTextActive]}>
-                  Photos ({photoPosts.length})
+                  {photoPosts.length}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -292,11 +297,24 @@ export default function ProfileScreen() {
               >
                 <Ionicons 
                   name="chatbubble-ellipses-outline" 
-                  size={20} 
+                  size={18} 
                   color={activePostTab === 'thoughts' ? '#ffd33d' : '#666'} 
                 />
                 <Text style={[styles.postTabText, activePostTab === 'thoughts' && styles.postTabTextActive]}>
-                  Thoughts ({thoughtPosts.length})
+                  {thoughtPosts.length}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.postTab, activePostTab === 'catches' && styles.postTabActive]}
+                onPress={() => setActivePostTab('catches')}
+              >
+                <Ionicons 
+                  name="fish-outline" 
+                  size={18} 
+                  color={activePostTab === 'catches' ? '#ffd33d' : '#666'} 
+                />
+                <Text style={[styles.postTabText, activePostTab === 'catches' && styles.postTabTextActive]}>
+                  {catches.length}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -319,41 +337,23 @@ export default function ProfileScreen() {
               ) : (
                 <View style={styles.postsGrid}>
                   {photoPosts.map((post) => {
-                    const sortedMedia = post.post_images?.sort((a, b) => a.display_order - b.display_order) || [];
-                    const firstMedia = sortedMedia[0];
-                    const hasVideo = sortedMedia.some(img => img.is_video);
-                    
-                    // Determine the best thumbnail to show:
-                    // 1. If first media is a video with a thumbnail, use that
-                    // 2. If first media is an image, use that
-                    // 3. Find any image in the post
-                    // 4. Fall back to placeholder
-                    let thumbnailUrl: string | null = null;
-                    
-                    if (firstMedia?.is_video && firstMedia?.thumbnail_url) {
-                      // Video with generated thumbnail
-                      thumbnailUrl = firstMedia.thumbnail_url;
-                    } else if (!firstMedia?.is_video && firstMedia?.image_url) {
-                      // First media is an image
-                      thumbnailUrl = firstMedia.image_url;
-                    } else {
-                      // Find any image in the post
-                      const anyImage = sortedMedia.find(img => !img.is_video);
-                      thumbnailUrl = anyImage?.image_url || null;
-                    }
-                    
+                    const firstMedia = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
+                    const hasVideo = post.post_images?.some(img => img.is_video);
+                    // Use thumbnail_url for videos, otherwise use image_url
+                    const imageUrl = firstMedia?.is_video && firstMedia?.thumbnail_url 
+                      ? firstMedia.thumbnail_url 
+                      : firstMedia?.image_url;
                     return (
                       <TouchableOpacity 
                         key={post.id}
                         style={styles.postThumbnail}
                         onPress={() => router.push(`/post/${post.id}`)}
                       >
-                        {thumbnailUrl ? (
-                          <Image source={{ uri: thumbnailUrl }} style={styles.thumbnailImage} />
+                        {imageUrl ? (
+                          <Image source={{ uri: imageUrl }} style={styles.thumbnailImage} />
                         ) : (
-                          // No thumbnail available, show placeholder
-                          <View style={styles.videoThumbnailPlaceholder}>
-                            <Ionicons name="play-circle" size={40} color="#ffd33d" />
+                          <View style={styles.thumbnailPlaceholder}>
+                            <Ionicons name="play" size={24} color="#fff" />
                           </View>
                         )}
                         {hasVideo && (
@@ -366,7 +366,7 @@ export default function ProfileScreen() {
                   })}
                 </View>
               )
-            ) : (
+            ) : activePostTab === 'thoughts' ? (
               // Thoughts List
               thoughtPosts.length === 0 ? (
                 <View style={styles.emptyPosts}>
@@ -392,7 +392,7 @@ export default function ProfileScreen() {
                       </Text>
                       <View style={styles.thoughtFooter}>
                         {post.location_name && (
-                          <Text style={styles.thoughtLocation}>📍 {post.location_name}</Text>
+                          <Text style={styles.thoughtLocation}>{post.location_name}</Text>
                         )}
                         <Text style={styles.thoughtDate}>
                           {new Date(post.created_at).toLocaleDateString()}
@@ -402,13 +402,102 @@ export default function ProfileScreen() {
                   ))}
                 </View>
               )
+            ) : (
+              // Catches List
+              catches.length === 0 ? (
+                <View style={styles.emptyPosts}>
+                  <Ionicons name="fish-outline" size={48} color="#666" />
+                  <Text style={styles.emptyPostsText}>No catches logged yet</Text>
+                  <Text style={styles.emptyPostsSubtext}>Start logging your catches to track your fishing progress</Text>
+                  <TouchableOpacity 
+                    style={styles.createPostButton}
+                    onPress={() => router.push('/log-catch')}
+                  >
+                    <Text style={styles.createPostButtonText}>Log a Catch</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View>
+                  {/* Catch Stats Summary */}
+                  {catchStats.totalCatches > 0 && (
+                    <View style={styles.catchStatsContainer}>
+                      <View style={styles.catchStatItem}>
+                        <Text style={styles.catchStatValue}>{catchStats.totalCatches}</Text>
+                        <Text style={styles.catchStatLabel}>Total</Text>
+                      </View>
+                      <View style={styles.catchStatItem}>
+                        <Text style={styles.catchStatValue}>{catchStats.speciesCount}</Text>
+                        <Text style={styles.catchStatLabel}>Species</Text>
+                      </View>
+                      {catchStats.topSpecies && (
+                        <View style={styles.catchStatItem}>
+                          <Text style={styles.catchStatValue} numberOfLines={1}>{catchStats.topSpecies.split(' ')[0]}</Text>
+                          <Text style={styles.catchStatLabel}>Top Species</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Log Catch Button */}
+                  <TouchableOpacity 
+                    style={styles.logCatchButton}
+                    onPress={() => router.push('/log-catch')}
+                  >
+                    <Ionicons name="add-circle" size={20} color="#25292e" />
+                    <Text style={styles.logCatchButtonText}>Log New Catch</Text>
+                  </TouchableOpacity>
+
+                  {/* Catches List */}
+                  <View style={styles.catchesList}>
+                    {catches.map((catchItem) => (
+                      <View key={catchItem.id} style={styles.catchCard}>
+                        <View style={styles.catchCardContent}>
+                          {catchItem.photo_url ? (
+                            <Image source={{ uri: catchItem.photo_url }} style={styles.catchPhoto} />
+                          ) : (
+                            <View style={styles.catchPhotoPlaceholder}>
+                              <Ionicons name="fish" size={24} color="#666" />
+                            </View>
+                          )}
+                          <View style={styles.catchInfo}>
+                            <Text style={styles.catchSpecies}>
+                              {catchItem.fish_species || 'Unknown Species'}
+                            </Text>
+                            <View style={styles.catchDetails}>
+                              {catchItem.size_length && (
+                                <Text style={styles.catchDetailText}>{catchItem.size_length}" </Text>
+                              )}
+                              {catchItem.size_weight && (
+                                <Text style={styles.catchDetailText}>{catchItem.size_weight} lbs</Text>
+                              )}
+                            </View>
+                            {catchItem.fly_used && (
+                              <Text style={styles.catchFly}>{catchItem.fly_used}</Text>
+                            )}
+                            <View style={styles.catchMeta}>
+                              {catchItem.location_name && (
+                                <Text style={styles.catchLocation} numberOfLines={1}>
+                                  {catchItem.location_name}
+                                </Text>
+                              )}
+                              <Text style={styles.catchDate}>
+                                {new Date(catchItem.caught_at).toLocaleDateString()}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )
             )}
           </View>
 
         </View>
       </ScrollView>
 
-      {/* Followers/Following Modal */}
+      {/* Followers Modal */}
       {user && (
         <FollowersModal
           visible={showFollowersModal}
@@ -677,13 +766,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  videoThumbnailPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#1a1d21',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   videoIndicator: {
     position: 'absolute',
     top: 4,
@@ -786,5 +868,119 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     marginLeft: 12,
+  },
+  // Empty posts subtext
+  emptyPostsSubtext: {
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 16,
+    maxWidth: 250,
+  },
+  // Catch stats styles
+  catchStatsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#1a1d21',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    justifyContent: 'space-around',
+  },
+  catchStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  catchStatValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffd33d',
+  },
+  catchStatLabel: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 4,
+  },
+  // Log catch button
+  logCatchButton: {
+    flexDirection: 'row',
+    backgroundColor: '#ffd33d',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
+  logCatchButtonText: {
+    color: '#25292e',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // Catches list styles
+  catchesList: {
+    gap: 12,
+  },
+  catchCard: {
+    backgroundColor: '#1a1d21',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  catchCardContent: {
+    flexDirection: 'row',
+    padding: 12,
+  },
+  catchPhoto: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+  },
+  catchPhotoPlaceholder: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#3a3a3a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  catchInfo: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'center',
+  },
+  catchSpecies: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  catchDetails: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  catchDetailText: {
+    fontSize: 14,
+    color: '#ffd33d',
+    fontWeight: '600',
+  },
+  catchFly: {
+    fontSize: 13,
+    color: '#ccc',
+    marginBottom: 4,
+  },
+  catchMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  catchLocation: {
+    fontSize: 12,
+    color: '#999',
+    flex: 1,
+    marginRight: 8,
+  },
+  catchDate: {
+    fontSize: 12,
+    color: '#666',
   },
 });
