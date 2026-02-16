@@ -1,19 +1,203 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Animated,
+    Dimensions,
     FlatList,
     Image,
     RefreshControl,
     StyleSheet,
     Text,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     View,
+    ViewToken,
 } from 'react-native';
 import { useAuth } from '../../lib/AuthContext';
-import { deletePost, getFeedPosts, hasUserLikedPost, likePost, Post, unlikePost } from '../../lib/postService';
+import { deletePost, getFeedPosts, hasUserLikedPost, likePost, Post, PostImage, unlikePost } from '../../lib/postService';
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const MAX_IMAGE_HEIGHT = screenWidth * 1.25; // Cap height at 1.25x width for very tall images
+const VIDEO_HEIGHT = screenWidth * 1.25; // 4:5 aspect ratio like Instagram
+
+// Component to render video with auto-play on visibility
+const FeedVideoItem = ({ 
+  item, 
+  isVisible,
+  globalMuted,
+  onToggleMute,
+}: { 
+  item: PostImage; 
+  isVisible: boolean;
+  globalMuted: boolean;
+  onToggleMute: () => void;
+}) => {
+  const videoRef = useRef<Video>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(true);
+  const [userPaused, setUserPaused] = useState(false); // Track if user manually paused
+  const playPauseOpacity = useRef(new Animated.Value(0)).current;
+
+  // Handle visibility changes
+  useEffect(() => {
+    if (videoRef.current) {
+      if (isVisible && !userPaused) {
+        videoRef.current.playAsync();
+      } else {
+        videoRef.current.pauseAsync();
+        if (!isVisible) {
+          videoRef.current.setPositionAsync(0); // Reset to start when scrolled away
+          setUserPaused(false); // Reset user pause state when scrolled away
+        }
+      }
+    }
+  }, [isVisible, userPaused]);
+
+  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      setIsPlaying(status.isPlaying);
+      setIsBuffering(status.isBuffering);
+    }
+  };
+
+  // Show play/pause icon briefly when tapped
+  const showPlayPauseIndicator = (isPaused: boolean) => {
+    playPauseOpacity.setValue(1);
+    Animated.timing(playPauseOpacity, {
+      toValue: 0,
+      duration: 800,
+      delay: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // Tap video to play/pause
+  const handleVideoPress = async () => {
+    if (!videoRef.current) return;
+    
+    if (isPlaying) {
+      await videoRef.current.pauseAsync();
+      setUserPaused(true);
+      showPlayPauseIndicator(true);
+    } else {
+      await videoRef.current.playAsync();
+      setUserPaused(false);
+      showPlayPauseIndicator(false);
+    }
+  };
+
+  // Mute button handler - stops propagation to prevent triggering play/pause
+  const handleMutePress = (e: any) => {
+    e.stopPropagation();
+    onToggleMute();
+  };
+
+  return (
+    <TouchableWithoutFeedback onPress={handleVideoPress}>
+      <View style={styles.videoContainer}>
+        <Video
+          ref={videoRef}
+          source={{ uri: item.image_url }}
+          style={styles.feedVideo}
+          resizeMode={ResizeMode.COVER}
+          shouldPlay={isVisible && !userPaused}
+          isLooping
+          isMuted={globalMuted}
+          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+          videoStyle={styles.videoStyle}
+        />
+        
+        {/* Buffering indicator */}
+        {isBuffering && isVisible && (
+          <View style={styles.bufferingOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+          </View>
+        )}
+
+        {/* Play/Pause indicator overlay */}
+        <Animated.View 
+          style={[
+            styles.playPauseOverlay, 
+            { opacity: playPauseOpacity }
+          ]}
+          pointerEvents="none"
+        >
+          <View style={styles.playPauseCircle}>
+            <Ionicons 
+              name={isPlaying ? 'pause' : 'play'} 
+              size={40} 
+              color="#fff" 
+            />
+          </View>
+        </Animated.View>
+
+        {/* Paused indicator (persistent when paused) */}
+        {userPaused && !isPlaying && (
+          <View style={styles.pausedIndicator} pointerEvents="none">
+            <Ionicons name="play" size={50} color="rgba(255,255,255,0.8)" />
+          </View>
+        )}
+        
+        {/* Mute/Unmute button */}
+        <TouchableOpacity 
+          style={styles.muteButton} 
+          onPress={handleMutePress}
+          activeOpacity={0.8}
+        >
+          <Ionicons 
+            name={globalMuted ? 'volume-mute' : 'volume-high'} 
+            size={18} 
+            color="#fff" 
+          />
+        </TouchableOpacity>
+      </View>
+    </TouchableWithoutFeedback>
+  );
+};
+
+// Component to render image with proper aspect ratio
+const FeedImageItem = ({ item }: { item: PostImage }) => {
+  const [imageHeight, setImageHeight] = useState(screenWidth); // Default to square
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (item.image_url) {
+      Image.getSize(
+        item.image_url,
+        (width, height) => {
+          const aspectRatio = height / width;
+          const calculatedHeight = Math.min(screenWidth * aspectRatio, MAX_IMAGE_HEIGHT);
+          setImageHeight(calculatedHeight);
+          setIsLoading(false);
+        },
+        () => {
+          setImageHeight(screenWidth);
+          setIsLoading(false);
+        }
+      );
+    }
+  }, [item.image_url]);
+
+  return (
+    <View style={[styles.mediaContainer, { height: imageHeight }]}>
+      {isLoading && (
+        <View style={styles.mediaLoading}>
+          <ActivityIndicator size="small" color="#ffd33d" />
+        </View>
+      )}
+      <Image
+        source={{ uri: item.image_url }}
+        style={[styles.postImage, { height: imageHeight }]}
+        resizeMode="cover"
+        onLoad={() => setIsLoading(false)}
+      />
+    </View>
+  );
+};
 
 export default function FeedScreen() {
   const { user } = useAuth();
@@ -21,6 +205,33 @@ export default function FeedScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
+  const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
+  const [globalMuted, setGlobalMuted] = useState(true); // Start muted like Instagram
+
+  // Viewability config for auto-play
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50, // Item must be 50% visible to be considered "visible"
+  }).current;
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    if (viewableItems.length > 0) {
+      // Find the first post with a video that's visible
+      const visibleVideoPost = viewableItems.find(item => {
+        const post = item.item as Post;
+        return post.post_images?.some(img => img.is_video);
+      });
+      
+      if (visibleVideoPost) {
+        setVisiblePostId(visibleVideoPost.item.id);
+      } else {
+        setVisiblePostId(null);
+      }
+    }
+  }).current;
+
+  const toggleGlobalMute = useCallback(() => {
+    setGlobalMuted(prev => !prev);
+  }, []);
 
   const loadPosts = useCallback(async () => {
     try {
@@ -201,19 +412,49 @@ export default function FeedScreen() {
           </View>
         </View>
 
-        {/* Images */}
+        {/* Images/Videos */}
         {images.length > 0 && (
-          <FlatList
-            data={images}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(img) => img.id}
-            renderItem={({ item: img }) => (
-              <Image source={{ uri: img.image_url }} style={styles.postImage} />
+          <View style={styles.mediaWrapper}>
+            {images.length === 1 ? (
+              images[0].is_video ? (
+                <FeedVideoItem 
+                  item={images[0]} 
+                  isVisible={visiblePostId === post.id}
+                  globalMuted={globalMuted}
+                  onToggleMute={toggleGlobalMute}
+                />
+              ) : (
+                <FeedImageItem item={images[0]} />
+              )
+            ) : (
+              <FlatList
+                data={images}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(img) => img.id}
+                renderItem={({ item: img }) => (
+                  img.is_video ? (
+                    <FeedVideoItem 
+                      item={img} 
+                      isVisible={visiblePostId === post.id}
+                      globalMuted={globalMuted}
+                      onToggleMute={toggleGlobalMute}
+                    />
+                  ) : (
+                    <FeedImageItem item={img} />
+                  )
+                )}
+              />
             )}
-            style={styles.imageList}
-          />
+            {/* Image count indicator for multiple images */}
+            {images.length > 1 && (
+              <View style={styles.imageCountBadge}>
+                <Ionicons name="copy-outline" size={12} color="#fff" />
+                <Text style={styles.imageCountText}>{images.length}</Text>
+              </View>
+            )}
+          </View>
         )}
 
         {/* Caption */}
@@ -314,6 +555,9 @@ export default function FeedScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
+        removeClippedSubviews={true}
       />
     </View>
   );
@@ -364,11 +608,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   postCard: {
-    backgroundColor: '#3a3a3a',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
+    backgroundColor: '#25292e',
+    marginTop: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#3a3a3a',
   },
   postHeader: {
     flexDirection: 'row',
@@ -421,13 +664,100 @@ const styles = StyleSheet.create({
   menuButton: {
     padding: 4,
   },
-  imageList: {
-    width: '100%',
+  mediaWrapper: {
+    position: 'relative',
+    width: screenWidth,
+    backgroundColor: '#1a1d21',
+  },
+  mediaContainer: {
+    width: screenWidth,
+    backgroundColor: '#1a1d21',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mediaLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1a1d21',
+    zIndex: 1,
   },
   postImage: {
-    width: 380,
-    height: 300,
+    width: screenWidth,
     resizeMode: 'cover',
+  },
+  videoContainer: {
+    width: screenWidth,
+    height: VIDEO_HEIGHT,
+    backgroundColor: '#000',
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  feedVideo: {
+    width: screenWidth,
+    height: VIDEO_HEIGHT,
+    backgroundColor: '#000',
+  },
+  videoStyle: {
+    // Ensures video renders with correct colors
+    backgroundColor: '#000',
+  },
+  bufferingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  playPauseOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playPauseCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pausedIndicator: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  muteButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageCountBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  imageCountText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   caption: {
     color: '#fff',

@@ -31,6 +31,93 @@ import {
 import { supabase } from '../../lib/supabase';
 
 const { width: screenWidth } = Dimensions.get('window');
+const MAX_IMAGE_HEIGHT = screenWidth * 1.25; // Cap height at 1.25x width
+
+// Component to render media with proper aspect ratio in post detail
+const PostDetailMediaItem = ({ item }: { item: PostImage }) => {
+  const [imageHeight, setImageHeight] = useState(screenWidth); // Default to square
+  const [isLoading, setIsLoading] = useState(true);
+
+  React.useEffect(() => {
+    if (!item.is_video && item.image_url) {
+      Image.getSize(
+        item.image_url,
+        (width, height) => {
+          const aspectRatio = height / width;
+          const calculatedHeight = Math.min(screenWidth * aspectRatio, MAX_IMAGE_HEIGHT);
+          setImageHeight(calculatedHeight);
+          setIsLoading(false);
+        },
+        () => {
+          setImageHeight(screenWidth);
+          setIsLoading(false);
+        }
+      );
+    } else {
+      setImageHeight(screenWidth * 1.25);
+      setIsLoading(false);
+    }
+  }, [item.image_url, item.is_video]);
+
+  if (item.is_video) {
+    return (
+      <View style={[detailMediaStyles.mediaContainer, { height: imageHeight }]}>
+        <Video
+          source={{ uri: item.image_url }}
+          style={[detailMediaStyles.video, { height: imageHeight }]}
+          resizeMode={ResizeMode.CONTAIN}
+          useNativeControls
+          shouldPlay={false}
+          isLooping={false}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[detailMediaStyles.mediaContainer, { height: imageHeight }]}>
+      {isLoading && (
+        <View style={detailMediaStyles.loading}>
+          <ActivityIndicator size="small" color="#ffd33d" />
+        </View>
+      )}
+      <Image
+        source={{ uri: item.image_url }}
+        style={[detailMediaStyles.image, { height: imageHeight }]}
+        resizeMode="cover"
+        onLoad={() => setIsLoading(false)}
+      />
+    </View>
+  );
+};
+
+const detailMediaStyles = StyleSheet.create({
+  mediaContainer: {
+    width: screenWidth,
+    backgroundColor: '#1a1d21',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1a1d21',
+    zIndex: 1,
+  },
+  image: {
+    width: screenWidth,
+    resizeMode: 'cover',
+  },
+  video: {
+    width: screenWidth,
+    backgroundColor: '#000',
+  },
+});
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -279,30 +366,29 @@ export default function PostDetailScreen() {
 
         {/* Images and Videos */}
         {images.length > 0 && (
-          <FlatList
-            data={images}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(img) => img.id}
-            renderItem={({ item: img }: { item: PostImage }) => (
-              img.is_video ? (
-                <View style={styles.videoWrapper}>
-                  <Video
-                    source={{ uri: img.image_url }}
-                    style={styles.postVideo}
-                    resizeMode={ResizeMode.CONTAIN}
-                    useNativeControls
-                    shouldPlay={false}
-                    isLooping={false}
-                  />
-                </View>
-              ) : (
-                <Image source={{ uri: img.image_url }} style={styles.postImage} />
-              )
+          <View style={styles.mediaWrapper}>
+            {images.length === 1 ? (
+              <PostDetailMediaItem item={images[0]} />
+            ) : (
+              <FlatList
+                data={images}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(img) => img.id}
+                renderItem={({ item: img }: { item: PostImage }) => (
+                  <PostDetailMediaItem item={img} />
+                )}
+              />
             )}
-            scrollEnabled={images.length > 1}
-          />
+            {/* Image count indicator for multiple images */}
+            {images.length > 1 && (
+              <View style={styles.imageCountBadge}>
+                <Ionicons name="copy-outline" size={12} color="#fff" />
+                <Text style={styles.imageCountText}>{images.length}</Text>
+              </View>
+            )}
+          </View>
         )}
 
         {/* Caption */}
@@ -532,21 +618,27 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 13,
   },
-  postImage: {
+  mediaWrapper: {
+    position: 'relative',
     width: screenWidth,
-    height: 320,
-    resizeMode: 'cover',
+    backgroundColor: '#1a1d21',
   },
-  videoWrapper: {
-    width: screenWidth,
-    height: 320,
-    backgroundColor: '#000',
-    justifyContent: 'center',
+  imageCountBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
-  postVideo: {
-    width: screenWidth,
-    height: 320,
+  imageCountText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   caption: {
     color: '#fff',

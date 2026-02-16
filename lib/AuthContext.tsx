@@ -1,5 +1,4 @@
 import { User } from '@supabase/supabase-js';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import * as AuthSession from 'expo-auth-session';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
@@ -58,7 +57,6 @@ interface AuthContextType {
   
   // Social auth (to be implemented with OAuth)
   signInWithGoogle: () => Promise<{ error: any }>;
-  signInWithApple: () => Promise<{ error: any }>;
   
   // Guest mode
   continueAsGuest: () => Promise<void>;
@@ -548,73 +546,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Social auth - Apple (Native)
-  const signInWithApple = async () => {
-    console.log('AuthContext: Starting Apple sign in...');
-    
-    // Clear guest mode
-    setIsGuest(false);
-    await storage.removeItem(GUEST_MODE_KEY);
-    
-    try {
-      // Check if Apple Sign In is available (iOS only)
-      if (Platform.OS !== 'ios') {
-        return { error: { message: 'Apple Sign In is only available on iOS devices' } };
-      }
-      
-      const isAvailable = await AppleAuthentication.isAvailableAsync();
-      if (!isAvailable) {
-        return { error: { message: 'Apple Sign In is not available on this device' } };
-      }
-      
-      // Generate a secure nonce for the auth request
-      const rawNonce = Crypto.getRandomBytes(32);
-      const nonce = Array.from(rawNonce).map(b => b.toString(16).padStart(2, '0')).join('');
-      const hashedNonce = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        nonce
-      );
-      
-      console.log('AuthContext: Requesting Apple credentials...');
-      
-      // Request Apple Sign In
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-        nonce: hashedNonce,
-      });
-      
-      console.log('AuthContext: Apple credentials received, signing in to Supabase...');
-      
-      // Sign in to Supabase with the Apple ID token
-      const { data, error } = await supabase.auth.signInWithIdToken({
-        provider: 'apple',
-        token: credential.identityToken!,
-        nonce: nonce,
-      });
-      
-      if (error) {
-        console.error('AuthContext: Supabase Apple sign in error:', error);
-        return { error };
-      }
-      
-      console.log('AuthContext: Apple sign in successful:', data.user?.id);
-      return { error: null };
-      
-    } catch (error: any) {
-      console.error('AuthContext: Apple sign in failed:', error);
-      
-      // Handle user cancellation
-      if (error.code === 'ERR_REQUEST_CANCELED') {
-        return { error: { message: 'Sign in was cancelled' } };
-      }
-      
-      return { error: { message: error.message || 'Failed to sign in with Apple' } };
-    }
-  };
-
   // Guest mode
   const continueAsGuest = async () => {
     console.log('AuthContext: Continuing as guest...');
@@ -684,7 +615,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     deleteAccount,
     refreshAuth,
     signInWithGoogle,
-    signInWithApple,
     continueAsGuest,
     exitGuestMode,
     createProfile,

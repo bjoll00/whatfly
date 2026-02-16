@@ -24,7 +24,7 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<'google' | 'apple' | null>(null);
+  const [socialLoading, setSocialLoading] = useState<'google' | null>(null);
   const [status, setStatus] = useState('');
   const [showVerificationMessage, setShowVerificationMessage] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
@@ -36,7 +36,6 @@ export default function AuthScreen() {
     signIn, 
     signUp, 
     signInWithGoogle,
-    signInWithApple,
     refreshAuth 
   } = useAuth();
   
@@ -171,20 +170,6 @@ export default function AuthScreen() {
     }
   };
 
-  const handleAppleSignIn = async () => {
-    setSocialLoading('apple');
-    try {
-      const { error } = await signInWithApple();
-      if (error) {
-        Alert.alert('Error', error.message || 'Failed to sign in with Apple');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
-    } finally {
-      setSocialLoading(null);
-    }
-  };
-
   const handleSkip = () => {
     // Just go back to the map - user can use basic features without signing in
     router.replace('/(tabs)/map');
@@ -212,22 +197,6 @@ export default function AuthScreen() {
 
         {/* Social Login Buttons */}
         <View style={styles.socialButtons}>
-          {/* Apple Sign In */}
-          <TouchableOpacity
-            style={[styles.socialButton, styles.appleButton]}
-            onPress={handleAppleSignIn}
-            disabled={socialLoading !== null || loading}
-          >
-            {socialLoading === 'apple' ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="logo-apple" size={20} color="#fff" />
-                <Text style={styles.appleButtonText}>Continue with Apple</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
           {/* Google Sign In */}
           <TouchableOpacity
             style={[styles.socialButton, styles.googleButton]}
@@ -430,14 +399,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     gap: 10,
-  },
-  appleButton: {
-    backgroundColor: '#000',
-  },
-  appleButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   googleButton: {
     backgroundColor: '#fff',

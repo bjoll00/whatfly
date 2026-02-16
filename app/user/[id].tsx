@@ -274,14 +274,30 @@ export default function UserProfileScreen() {
             ) : (
               <View style={styles.postsGrid}>
                 {photoPosts.map((post) => {
-                  const firstImage = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
+                  const firstMedia = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
+                  const hasVideo = post.post_images?.some(img => img.is_video);
+                  // Use thumbnail_url for videos, otherwise use image_url
+                  const imageUrl = firstMedia?.is_video && firstMedia?.thumbnail_url 
+                    ? firstMedia.thumbnail_url 
+                    : firstMedia?.image_url;
                   return (
                     <TouchableOpacity 
                       key={post.id}
                       style={styles.postThumbnail}
                       onPress={() => router.push(`/post/${post.id}`)}
                     >
-                      <Image source={{ uri: firstImage?.image_url }} style={styles.thumbnailImage} />
+                      {imageUrl ? (
+                        <Image source={{ uri: imageUrl }} style={styles.thumbnailImage} />
+                      ) : (
+                        <View style={styles.thumbnailPlaceholder}>
+                          <Ionicons name="play" size={24} color="#fff" />
+                        </View>
+                      )}
+                      {hasVideo && (
+                        <View style={styles.videoIndicator}>
+                          <Ionicons name="videocam" size={16} color="#fff" />
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -447,6 +463,27 @@ const styles = StyleSheet.create({
   followingButtonText: {
     color: '#ffd33d',
   },
+  profileActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  messageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#ffd33d',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  messageButtonText: {
+    color: '#ffd33d',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -516,10 +553,12 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 4,
     overflow: 'hidden',
+    position: 'relative',
   },
   thumbnailImage: {
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
   thumbnailPlaceholder: {
     width: '100%',
@@ -527,6 +566,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#3a3a3a',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  videoIndicator: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 4,
+    padding: 4,
   },
   // Post tabs styles
   postTabs: {

@@ -8,6 +8,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -18,7 +19,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { useFishing } from '../lib/FishingContext';
-import { createPost, MediaItem } from '../lib/postService';
+import { createPost, MediaItem, VideoProgressCallback } from '../lib/postService';
 
 const MAX_MEDIA = 4;
 
@@ -33,6 +34,18 @@ export default function CreatePostScreen() {
   const [includeConditions, setIncludeConditions] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoProgressStage, setVideoProgressStage] = useState<'compressing' | 'uploading'>('compressing');
+  const [showVideoProgress, setShowVideoProgress] = useState(false);
+
+  // Check if post contains videos
+  const hasVideos = media.some(m => m.isVideo);
+
+  // Video progress callback
+  const handleVideoProgress: VideoProgressCallback = (progress, stage) => {
+    setVideoProgress(progress);
+    setVideoProgressStage(stage);
+  };
 
   // Redirect if not authenticated
   if (!user) {
@@ -145,21 +158,32 @@ export default function CreatePostScreen() {
     }
 
     setIsSubmitting(true);
+    
+    // Show progress modal if post contains videos
+    if (hasVideos) {
+      setVideoProgress(0);
+      setVideoProgressStage('compressing');
+      setShowVideoProgress(true);
+    }
 
     try {
-      const { post, error } = await createPost(user.id, {
-        caption: caption.trim() || undefined,
-        location_name: locationName.trim() || undefined,
-        latitude: includeLocation && fishingConditions?.latitude ? fishingConditions.latitude : undefined,
-        longitude: includeLocation && fishingConditions?.longitude ? fishingConditions.longitude : undefined,
-        conditions: includeConditions && fishingConditions ? {
-          weather: fishingConditions.weather_conditions,
-          water: fishingConditions.water_conditions,
-          temperature: fishingConditions.air_temperature_range,
-        } : undefined,
-        is_public: isPublic,
-        media: media,
-      });
+      const { post, error } = await createPost(
+        user.id, 
+        {
+          caption: caption.trim() || undefined,
+          location_name: locationName.trim() || undefined,
+          latitude: includeLocation && fishingConditions?.latitude ? fishingConditions.latitude : undefined,
+          longitude: includeLocation && fishingConditions?.longitude ? fishingConditions.longitude : undefined,
+          conditions: includeConditions && fishingConditions ? {
+            weather: fishingConditions.weather_conditions,
+            water: fishingConditions.water_conditions,
+            temperature: fishingConditions.air_temperature_range,
+          } : undefined,
+          is_public: isPublic,
+          media: media,
+        },
+        hasVideos ? handleVideoProgress : undefined
+      );
 
       if (error) {
         Alert.alert('Error', error);
@@ -174,6 +198,7 @@ export default function CreatePostScreen() {
       Alert.alert('Error', 'Failed to create post. Please try again.');
     } finally {
       setIsSubmitting(false);
+      setShowVideoProgress(false);
     }
   };
 
@@ -342,6 +367,40 @@ export default function CreatePostScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Video Processing Progress Modal */}
+      <Modal
+        visible={showVideoProgress}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.progressModalOverlay}>
+          <View style={styles.progressModalContent}>
+            <ActivityIndicator size="large" color="#ffd33d" />
+            <Text style={styles.progressTitle}>
+              {videoProgressStage === 'compressing' 
+                ? 'Optimizing video colors...' 
+                : 'Uploading to WhatFly...'}
+            </Text>
+            <View style={styles.progressBarContainer}>
+              <View 
+                style={[
+                  styles.progressBar, 
+                  { width: `${Math.round(videoProgress * 100)}%` }
+                ]} 
+              />
+            </View>
+            <Text style={styles.progressPercent}>
+              {Math.round(videoProgress * 100)}%
+            </Text>
+            <Text style={styles.progressSubtext}>
+              {videoProgressStage === 'compressing'
+                ? 'Converting HDR to SDR for best quality'
+                : 'Almost there...'}
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -538,5 +597,52 @@ const styles = StyleSheet.create({
     color: '#25292e',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // Video progress modal styles
+  progressModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressModalContent: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    marginHorizontal: 40,
+    minWidth: 280,
+  },
+  progressTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 20,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  progressBarContainer: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#444',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#ffd33d',
+    borderRadius: 4,
+  },
+  progressPercent: {
+    color: '#ffd33d',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 12,
+  },
+  progressSubtext: {
+    color: '#999',
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: 'center',
   },
 });

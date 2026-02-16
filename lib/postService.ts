@@ -1,6 +1,10 @@
 import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Video } from 'react-native-compressor';
 import { supabase } from './supabase';
+
+// Video compression progress callback type
+export type VideoProgressCallback = (progress: number, stage: 'compressing' | 'uploading') => void;
 
 // Types
 export interface Post {
@@ -34,6 +38,7 @@ export interface PostImage {
   display_order: number;
   created_at: string;
   is_video?: boolean;
+  thumbnail_url?: string | null;
 }
 
 export interface Comment {
@@ -103,19 +108,63 @@ async function uploadPostImage(uri: string, postId: string, index: number): Prom
   }
 }
 
-// Upload video to Supabase storage
-async function uploadPostVideo(uri: string, postId: string, index: number): Promise<string | null> {
+// Compress video (HDR to SDR tone mapping + size optimization)
+async function compressVideo(
+  uri: string, 
+  onProgress?: (progress: number) => void
+): Promise<string> {
+  console.log('🎬 Starting video compression (HDR to SDR)...');
+  
   try {
-    const ext = uri.split('.').pop()?.toLowerCase() || 'mp4';
-    const contentType = `video/${ext === 'mov' ? 'quicktime' : ext}`;
-    const fileName = `${postId}/${Date.now()}-${index}.${ext}`;
+    const compressedUri = await Video.compress(
+      uri,
+      {
+        compressionMethod: 'auto', // Forces HDR-to-SDR tone mapping
+        maxSize: 1920, // Maintains 1080p quality
+        minimumFileSizeForCompress: 0, // Always compress to ensure tone mapping
+      },
+      (progress) => {
+        console.log(`📊 Compression progress: ${Math.round(progress * 100)}%`);
+        onProgress?.(progress);
+      }
+    );
+    
+    console.log('✅ Video compression complete:', compressedUri);
+    return compressedUri;
+  } catch (error) {
+    console.error('❌ Video compression failed, using original:', error);
+    // If compression fails, return original URI
+    return uri;
+  }
+}
 
-    // Read the file as base64
-    const base64 = await FileSystem.readAsStringAsync(uri, {
+// Upload video to Supabase storage (with compression)
+async function uploadPostVideo(
+  uri: string, 
+  postId: string, 
+  index: number,
+  onProgress?: VideoProgressCallback
+): Promise<string | null> {
+  try {
+    // Step 1: Compress video (HDR to SDR tone mapping)
+    onProgress?.(0, 'compressing');
+    const compressedUri = await compressVideo(uri, (progress) => {
+      onProgress?.(progress, 'compressing');
+    });
+    
+    // Step 2: Upload compressed video
+    onProgress?.(0, 'uploading');
+    
+    // Always use mp4 for compressed output
+    const fileName = `${postId}/${Date.now()}-${index}.mp4`;
+    const contentType = 'video/mp4';
+
+    // Read the compressed file as base64
+    const base64 = await FileSystem.readAsStringAsync(compressedUri, {
       encoding: 'base64',
     });
 
-    // Upload to Supabase storage (using post-images bucket for both)
+    // Upload to Supabase storage
     const { error: uploadError } = await supabase.storage
       .from('post-images')
       .upload(fileName, decode(base64), {
@@ -133,6 +182,17 @@ async function uploadPostVideo(uri: string, postId: string, index: number): Prom
       .from('post-images')
       .getPublicUrl(fileName);
 
+    // Cleanup: Delete temporary compressed file if different from original
+    if (compressedUri !== uri && compressedUri.startsWith('file://')) {
+      try {
+        await FileSystem.deleteAsync(compressedUri, { idempotent: true });
+        console.log('🧹 Cleaned up temporary compressed file');
+      } catch (cleanupError) {
+        console.warn('Could not cleanup temp file:', cleanupError);
+      }
+    }
+
+    onProgress?.(1, 'uploading');
     return urlData?.publicUrl || null;
   } catch (error) {
     console.error('Error uploading post video:', error);
@@ -141,7 +201,11 @@ async function uploadPostVideo(uri: string, postId: string, index: number): Prom
 }
 
 // Create a new post
-export async function createPost(userId: string, input: CreatePostInput): Promise<{ post: Post | null; error: string | null }> {
+export async function createPost(
+  userId: string, 
+  input: CreatePostInput,
+  onVideoProgress?: VideoProgressCallback
+): Promise<{ post: Post | null; error: string | null }> {
   try {
     // 1. Create the post
     const { data: post, error: postError } = await supabase
@@ -169,7 +233,7 @@ export async function createPost(userId: string, input: CreatePostInput): Promis
       for (let i = 0; i < input.media.length; i++) {
         const mediaItem = input.media[i];
         const mediaUrl = mediaItem.isVideo 
-          ? await uploadPostVideo(mediaItem.uri, post.id, i)
+          ? await uploadPostVideo(mediaItem.uri, post.id, i, onVideoProgress)
           : await uploadPostImage(mediaItem.uri, post.id, i);
         
         if (mediaUrl) {

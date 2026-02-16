@@ -765,6 +765,7 @@ const styles = StyleSheet.create({
   thumbnailImage: {
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
   videoIndicator: {
     position: 'absolute',
