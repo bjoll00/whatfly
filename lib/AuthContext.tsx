@@ -3,8 +3,8 @@ import * as AuthSession from 'expo-auth-session';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import * as profileService from './profileService';
 import { supabase } from './supabase';
 import { Profile, ProfileUpdate } from './types';
@@ -97,6 +97,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Track app state for session refresh
+  const appState = useRef(AppState.currentState);
+
   // Check for guest mode on mount
   useEffect(() => {
     const checkGuestMode = async () => {
@@ -112,39 +115,83 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkGuestMode();
   }, []);
 
+  // Refresh session when app comes to foreground
+  // This ensures tokens are refreshed after being backgrounded
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      // App came to foreground from background or inactive
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        console.log('AuthContext: App came to foreground, refreshing session...');
+        try {
+          // This will refresh the token if needed
+          const { data: { session }, error } = await supabase.auth.getSession();
+          
+          if (error) {
+            console.error('AuthContext: Error refreshing session:', error);
+          } else if (session) {
+            console.log('AuthContext: Session refreshed successfully');
+            setUser(session.user);
+            // Optionally refresh profile too
+            if (session.user && !profile) {
+              loadProfile(session.user.id);
+            }
+          } else {
+            console.log('AuthContext: No active session found on foreground');
+          }
+        } catch (error) {
+          console.error('AuthContext: Failed to refresh session on foreground:', error);
+        }
+      }
+      
+      appState.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      subscription.remove();
+    };
+  }, [profile, loadProfile]);
+
   useEffect(() => {
     let isMounted = true;
     let hasInitialized = false;
     
-    // Get initial session with timeout
+    // Start auto refresh - ensures tokens are refreshed before expiry
+    supabase.auth.startAutoRefresh();
+    
+    // Get initial session
     const initAuth = async () => {
       try {
-        // Add timeout for getSession to prevent hanging
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) => 
-          setTimeout(() => resolve({ data: { session: null } }), 5000)
-        );
+        console.log('AuthContext: Initializing auth...');
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+        if (error) {
+          console.error('AuthContext: Error getting initial session:', error);
+        }
         
         if (!isMounted) return;
         hasInitialized = true;
         
-        setUser(session?.user ?? null);
-        
-        // Load profile if user exists (with timeout)
         if (session?.user) {
+          console.log('AuthContext: Found existing session for user:', session.user.id);
+          setUser(session.user);
+          
+          // Load profile
           try {
-            await Promise.race([
-              loadProfile(session.user.id),
-              new Promise<void>((resolve) => setTimeout(resolve, 5000))
-            ]);
+            await loadProfile(session.user.id);
           } catch (e) {
-            // Profile load failed, continue anyway
+            console.error('AuthContext: Error loading initial profile:', e);
           }
+        } else {
+          console.log('AuthContext: No existing session found');
+          setUser(null);
         }
       } catch (error) {
-        console.error('Auth init error:', error);
+        console.error('AuthContext: Auth init error:', error);
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -160,12 +207,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
       
+      console.log('AuthContext: Auth state changed:', event);
+      
       // Skip INITIAL_SESSION if we already initialized
       if (event === 'INITIAL_SESSION' && hasInitialized) return;
       
       // Mark as initialized if this is the first event
       if (event === 'INITIAL_SESSION') {
         hasInitialized = true;
+      }
+      
+      // Handle token refresh - just log it, session is already updated
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('AuthContext: Token refreshed successfully');
+        if (session?.user) {
+          setUser(session.user);
+        }
+        return; // Don't set loading state for token refresh
+      }
+      
+      // Handle explicit sign out
+      if (event === 'SIGNED_OUT') {
+        console.log('AuthContext: User signed out');
+        setUser(null);
+        setProfile(null);
+        setNeedsUsername(false);
+        setLoading(false);
+        return;
       }
       
       setLoading(true);
@@ -175,14 +243,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         setIsGuest(false);
         storage.removeItem(GUEST_MODE_KEY).catch(() => {});
-        // Wait for profile load with timeout
+        
         try {
-          await Promise.race([
-            loadProfile(session.user.id),
-            new Promise<void>((resolve) => setTimeout(resolve, 5000))
-          ]);
+          await loadProfile(session.user.id);
         } catch (e) {
-          // Profile load failed, continue anyway
+          console.error('AuthContext: Error loading profile after auth change:', e);
         }
       } else {
         setProfile(null);
@@ -196,6 +261,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       isMounted = false;
+      supabase.auth.stopAutoRefresh();
       subscription.unsubscribe();
     };
   }, [loadProfile]);

@@ -35,7 +35,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: Platform.OS === 'web', // Only detect URL sessions on web
     flowType: 'pkce',
     storage: ExpoSecureStoreAdapter,
   }

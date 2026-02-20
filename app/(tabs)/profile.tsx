@@ -14,6 +14,7 @@ import {
     View,
 } from 'react-native';
 import FollowersModal from '../../components/FollowersModal';
+import VideoThumbnail from '../../components/VideoThumbnail';
 import { useAuth } from '../../lib/AuthContext';
 import { Catch, getCatchStats, getUserCatches } from '../../lib/catchService';
 import { getFollowCounts, getUserPosts, Post } from '../../lib/postService';
@@ -204,7 +205,7 @@ export default function ProfileScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.content}>
-          {/* Settings Button */}
+          {/* Settings Button - Upper Right */}
           <TouchableOpacity 
             style={styles.settingsButton}
             onPress={() => router.push('/settings')}
@@ -212,7 +213,10 @@ export default function ProfileScreen() {
             <Ionicons name="settings-outline" size={24} color="#fff" />
           </TouchableOpacity>
 
-          {/* Profile Header */}
+          {/* Centered Username */}
+          <Text style={styles.centeredUsername}>@{profile?.username || 'username'}</Text>
+
+          {/* Profile Header - Avatar and Stats */}
           <View style={styles.profileHeader}>
             <TouchableOpacity 
               style={styles.avatarContainer}
@@ -227,43 +231,35 @@ export default function ProfileScreen() {
                   </Text>
                 </View>
               )}
-              <View style={styles.editAvatarBadge}>
-                <Ionicons name="camera" size={12} color="#fff" />
-              </View>
             </TouchableOpacity>
 
-            <Text style={styles.username}>
-              @{profile?.username || 'username'}
-            </Text>
-            
+            {/* Stats next to avatar */}
+            <View style={styles.profileStats}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{posts.length}</Text>
+                <Text style={styles.statLabel}>Posts</Text>
+              </View>
+              <TouchableOpacity style={styles.statItem} onPress={() => openFollowersModal('followers')}>
+                <Text style={styles.statValue}>{followCounts.followers}</Text>
+                <Text style={styles.statLabel}>Followers</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.statItem} onPress={() => openFollowersModal('following')}>
+                <Text style={styles.statValue}>{followCounts.following}</Text>
+                <Text style={styles.statLabel}>Following</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Bio and Edit Profile */}
+          <View style={styles.bioSection}>
             {profile?.bio && (
               <Text style={styles.bio}>{profile.bio}</Text>
             )}
-
             <TouchableOpacity
               style={styles.editProfileButton}
               onPress={() => router.push('/edit-profile')}
             >
-              <Ionicons name="pencil" size={16} color="#ffd33d" />
               <Text style={styles.editProfileButtonText}>Edit Profile</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Stats Section */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{posts.length}</Text>
-              <Text style={styles.statLabel}>Posts</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <TouchableOpacity style={styles.statItem} onPress={() => openFollowersModal('followers')}>
-              <Text style={styles.statValue}>{followCounts.followers}</Text>
-              <Text style={styles.statLabel}>Followers</Text>
-            </TouchableOpacity>
-            <View style={styles.statDivider} />
-            <TouchableOpacity style={styles.statItem} onPress={() => openFollowersModal('following')}>
-              <Text style={styles.statValue}>{followCounts.following}</Text>
-              <Text style={styles.statLabel}>Following</Text>
             </TouchableOpacity>
           </View>
 
@@ -338,27 +334,26 @@ export default function ProfileScreen() {
                 <View style={styles.postsGrid}>
                   {photoPosts.map((post) => {
                     const firstMedia = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
-                    const hasVideo = post.post_images?.some(img => img.is_video);
-                    // Use thumbnail_url for videos, otherwise use image_url
-                    const imageUrl = firstMedia?.is_video && firstMedia?.thumbnail_url 
-                      ? firstMedia.thumbnail_url 
-                      : firstMedia?.image_url;
+                    const isFirstMediaVideo = firstMedia?.is_video;
+                    
                     return (
                       <TouchableOpacity 
                         key={post.id}
                         style={styles.postThumbnail}
                         onPress={() => router.push(`/post/${post.id}`)}
                       >
-                        {imageUrl ? (
-                          <Image source={{ uri: imageUrl }} style={styles.thumbnailImage} />
+                        {isFirstMediaVideo ? (
+                          <VideoThumbnail
+                            videoUrl={firstMedia.image_url}
+                            thumbnailUrl={firstMedia.thumbnail_url}
+                            style={styles.thumbnailImage}
+                            showPlayIcon={true}
+                          />
+                        ) : firstMedia?.image_url ? (
+                          <Image source={{ uri: firstMedia.image_url }} style={styles.thumbnailImage} />
                         ) : (
                           <View style={styles.thumbnailPlaceholder}>
-                            <Ionicons name="play" size={24} color="#fff" />
-                          </View>
-                        )}
-                        {hasVideo && (
-                          <View style={styles.videoIndicator}>
-                            <Ionicons name="videocam" size={16} color="#fff" />
+                            <Ionicons name="image-outline" size={24} color="#666" />
                           </View>
                         )}
                       </TouchableOpacity>
@@ -536,6 +531,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
+  centeredUsername: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    paddingTop: Platform.OS === 'ios' ? 50 : 10,
+    paddingBottom: 16,
+  },
   // Guest styles
   guestHeader: {
     alignItems: 'center',
@@ -611,106 +614,75 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffd33d',
   },
-  // Profile header styles
+  // Profile header styles - Instagram style
   profileHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#3a3a3a',
-    marginBottom: 24,
+    paddingVertical: 16,
+    gap: 24,
   },
   avatarContainer: {
     position: 'relative',
-    marginBottom: 16,
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 86,
+    height: 86,
+    borderRadius: 43,
   },
   avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 86,
+    height: 86,
+    borderRadius: 43,
     backgroundColor: '#ffd33d',
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarInitial: {
-    fontSize: 40,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#25292e',
   },
-  editAvatarBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#3a3a3a',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#25292e',
+  profileStats: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
   },
-  username: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ffd33d',
-    marginBottom: 4,
-  },
-  displayName: {
-    fontSize: 18,
-    color: '#fff',
-    marginBottom: 8,
+  bioSection: {
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#3a3a3a',
+    marginBottom: 16,
   },
   bio: {
     fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    maxWidth: 300,
-    marginBottom: 16,
+    color: '#ccc',
+    lineHeight: 20,
+    marginBottom: 12,
   },
   editProfileButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#3a3a3a',
-    paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
+    borderRadius: 8,
+    alignItems: 'center',
   },
   editProfileButtonText: {
     fontSize: 14,
-    color: '#ffd33d',
+    color: '#fff',
     fontWeight: '600',
   },
   // Stats styles
-  statsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#1a1d21',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 24,
-    justifyContent: 'space-around',
-  },
   statItem: {
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
   },
   statLabel: {
     fontSize: 12,
     color: '#999',
-    marginTop: 4,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#3a3a3a',
+    marginTop: 2,
   },
   // Section styles
   section: {

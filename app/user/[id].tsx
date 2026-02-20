@@ -10,6 +10,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import VideoThumbnail from '../../components/VideoThumbnail';
 import { useAuth } from '../../lib/AuthContext';
 import {
     followUser,
@@ -275,27 +276,26 @@ export default function UserProfileScreen() {
               <View style={styles.postsGrid}>
                 {photoPosts.map((post) => {
                   const firstMedia = post.post_images?.sort((a, b) => a.display_order - b.display_order)[0];
-                  const hasVideo = post.post_images?.some(img => img.is_video);
-                  // Use thumbnail_url for videos, otherwise use image_url
-                  const imageUrl = firstMedia?.is_video && firstMedia?.thumbnail_url 
-                    ? firstMedia.thumbnail_url 
-                    : firstMedia?.image_url;
+                  const isFirstMediaVideo = firstMedia?.is_video;
+                  
                   return (
                     <TouchableOpacity 
                       key={post.id}
                       style={styles.postThumbnail}
                       onPress={() => router.push(`/post/${post.id}`)}
                     >
-                      {imageUrl ? (
-                        <Image source={{ uri: imageUrl }} style={styles.thumbnailImage} />
+                      {isFirstMediaVideo ? (
+                        <VideoThumbnail
+                          videoUrl={firstMedia.image_url}
+                          thumbnailUrl={firstMedia.thumbnail_url}
+                          style={styles.thumbnailImage}
+                          showPlayIcon={true}
+                        />
+                      ) : firstMedia?.image_url ? (
+                        <Image source={{ uri: firstMedia.image_url }} style={styles.thumbnailImage} />
                       ) : (
                         <View style={styles.thumbnailPlaceholder}>
-                          <Ionicons name="play" size={24} color="#fff" />
-                        </View>
-                      )}
-                      {hasVideo && (
-                        <View style={styles.videoIndicator}>
-                          <Ionicons name="videocam" size={16} color="#fff" />
+                          <Ionicons name="image-outline" size={24} color="#666" />
                         </View>
                       )}
                     </TouchableOpacity>
