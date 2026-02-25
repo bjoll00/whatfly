@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { useIsRestoring } from '@tanstack/react-query';
+import { Image as ExpoImage } from 'expo-image';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -17,14 +19,16 @@ import {
     View,
     ViewToken,
 } from 'react-native';
+import { useFeedPosts, useLikedPosts, useLikePost, useDeletePost, useInvalidateFeed } from '../../hooks/useFeed';
 import { useAuth } from '../../lib/AuthContext';
-import { deletePost, getFeedPosts, hasUserLikedPost, likePost, Post, PostImage, unlikePost } from '../../lib/postService';
+import { getAvatarUrl, getFeedImageUrl } from '../../lib/imageOptimization';
+import { Post, PostImage } from '../../lib/postService';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const MAX_IMAGE_HEIGHT = screenWidth * 1.25; // Cap height at 1.25x width for very tall images
 const VIDEO_HEIGHT = screenWidth * 1.25; // 4:5 aspect ratio like Instagram
 
-// Component to render video with auto-play on visibility
+// Component to render video with auto-play on visibility using expo-video
 const FeedVideoItem = ({ 
   item, 
   isVisible,
@@ -36,36 +40,62 @@ const FeedVideoItem = ({
   globalMuted: boolean;
   onToggleMute: () => void;
 }) => {
-  const videoRef = useRef<Video>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [userPaused, setUserPaused] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
-  const [userPaused, setUserPaused] = useState(false); // Track if user manually paused
   const playPauseOpacity = useRef(new Animated.Value(0)).current;
+
+  // Create video player with caching enabled for bandwidth savings
+  const player = useVideoPlayer(
+    {
+      uri: item.image_url,
+      metadata: {
+        title: 'Feed Video',
+      },
+    },
+    (player) => {
+      player.loop = true;
+      player.muted = globalMuted;
+    }
+  );
 
   // Handle visibility changes
   useEffect(() => {
-    if (videoRef.current) {
-      if (isVisible && !userPaused) {
-        videoRef.current.playAsync();
-      } else {
-        videoRef.current.pauseAsync();
-        if (!isVisible) {
-          videoRef.current.setPositionAsync(0); // Reset to start when scrolled away
-          setUserPaused(false); // Reset user pause state when scrolled away
-        }
+    if (!player) return;
+    
+    if (isVisible && !userPaused) {
+      player.play();
+    } else {
+      player.pause();
+      if (!isVisible) {
+        player.currentTime = 0; // Reset to start when scrolled away
+        setUserPaused(false); // Reset user pause state when scrolled away
       }
     }
-  }, [isVisible, userPaused]);
+  }, [isVisible, userPaused, player]);
 
-  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded) {
-      setIsPlaying(status.isPlaying);
-      setIsBuffering(status.isBuffering);
+  // Handle mute state changes
+  useEffect(() => {
+    if (player) {
+      player.muted = globalMuted;
     }
-  };
+  }, [globalMuted, player]);
+
+  // Track buffering state
+  useEffect(() => {
+    if (!player) return;
+    
+    const subscription = player.addListener('statusChange', ({ status }) => {
+      // readyToPlay means not buffering, anything else (like 'loading') means buffering
+      setIsBuffering(status !== 'readyToPlay');
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [player]);
 
   // Show play/pause icon briefly when tapped
-  const showPlayPauseIndicator = (isPaused: boolean) => {
+  const showPlayPauseIndicator = () => {
     playPauseOpacity.setValue(1);
     Animated.timing(playPauseOpacity, {
       toValue: 0,
@@ -76,17 +106,17 @@ const FeedVideoItem = ({
   };
 
   // Tap video to play/pause
-  const handleVideoPress = async () => {
-    if (!videoRef.current) return;
+  const handleVideoPress = () => {
+    if (!player) return;
     
-    if (isPlaying) {
-      await videoRef.current.pauseAsync();
+    if (player.playing) {
+      player.pause();
       setUserPaused(true);
-      showPlayPauseIndicator(true);
+      showPlayPauseIndicator();
     } else {
-      await videoRef.current.playAsync();
+      player.play();
       setUserPaused(false);
-      showPlayPauseIndicator(false);
+      showPlayPauseIndicator();
     }
   };
 
@@ -96,19 +126,16 @@ const FeedVideoItem = ({
     onToggleMute();
   };
 
+  const isPlaying = player?.playing ?? false;
+
   return (
     <TouchableWithoutFeedback onPress={handleVideoPress}>
       <View style={styles.videoContainer}>
-        <Video
-          ref={videoRef}
-          source={{ uri: item.image_url }}
+        <VideoView
+          player={player}
           style={styles.feedVideo}
-          resizeMode={ResizeMode.COVER}
-          shouldPlay={isVisible && !userPaused}
-          isLooping
-          isMuted={globalMuted}
-          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-          videoStyle={styles.videoStyle}
+          contentFit="cover"
+          nativeControls={false}
         />
         
         {/* Buffering indicator */}
@@ -159,10 +186,11 @@ const FeedVideoItem = ({
   );
 };
 
-// Component to render image with proper aspect ratio
+// Component to render image with proper aspect ratio and caching
 const FeedImageItem = ({ item }: { item: PostImage }) => {
   const [imageHeight, setImageHeight] = useState(screenWidth); // Default to square
   const [isLoading, setIsLoading] = useState(true);
+  const optimizedUrl = getFeedImageUrl(item.image_url);
 
   useEffect(() => {
     if (item.image_url) {
@@ -189,10 +217,12 @@ const FeedImageItem = ({ item }: { item: PostImage }) => {
           <ActivityIndicator size="small" color="#ffd33d" />
         </View>
       )}
-      <Image
-        source={{ uri: item.image_url }}
+      <ExpoImage
+        source={{ uri: optimizedUrl }}
         style={[styles.postImage, { height: imageHeight }]}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="disk"
+        transition={200}
         onLoad={() => setIsLoading(false)}
       />
     </View>
@@ -201,12 +231,26 @@ const FeedImageItem = ({ item }: { item: PostImage }) => {
 
 export default function FeedScreen() {
   const { user } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
   const [globalMuted, setGlobalMuted] = useState(true); // Start muted like Instagram
+  const [localLikedPosts, setLocalLikedPosts] = useState<Set<string>>(new Set());
+
+  // TanStack Query hooks
+  const { data: posts = [], isLoading, refetch, isFetching } = useFeedPosts(20);
+  const postIds = useMemo(() => posts.map(p => p.id), [posts]);
+  const { data: likedPostsFromServer } = useLikedPosts(user?.id ?? null, postIds);
+  const likePostMutation = useLikePost();
+  const deletePostMutation = useDeletePost();
+  const invalidateFeed = useInvalidateFeed();
+
+  // Merge server liked posts with local state
+  const likedPosts = useMemo(() => {
+    const merged = new Set(localLikedPosts);
+    if (likedPostsFromServer && Array.isArray(likedPostsFromServer)) {
+      likedPostsFromServer.forEach(id => merged.add(id));
+    }
+    return merged;
+  }, [likedPostsFromServer, localLikedPosts]);
 
   // Viewability config for auto-play
   const viewabilityConfig = useRef({
@@ -233,40 +277,11 @@ export default function FeedScreen() {
     setGlobalMuted(prev => !prev);
   }, []);
 
-  const loadPosts = useCallback(async () => {
-    try {
-      const feedPosts = await getFeedPosts(20, 0);
-      setPosts(feedPosts);
+  const handleRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
-      // Check which posts the user has liked
-      if (user) {
-        const likedSet = new Set<string>();
-        await Promise.all(
-          feedPosts.map(async (post) => {
-            const hasLiked = await hasUserLikedPost(user.id, post.id);
-            if (hasLiked) likedSet.add(post.id);
-          })
-        );
-        setLikedPosts(likedSet);
-      }
-    } catch (error) {
-      console.error('Error loading posts:', error);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    loadPosts();
-  }, [loadPosts]);
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    loadPosts();
-  };
-
-  const handleLike = async (postId: string) => {
+  const handleLike = useCallback(async (postId: string) => {
     if (!user) {
       router.push('/auth');
       return;
@@ -274,8 +289,8 @@ export default function FeedScreen() {
 
     const isLiked = likedPosts.has(postId);
     
-    // Optimistic update
-    setLikedPosts(prev => {
+    // Local optimistic update for liked state
+    setLocalLikedPosts(prev => {
       const newSet = new Set(prev);
       if (isLiked) {
         newSet.delete(postId);
@@ -285,23 +300,9 @@ export default function FeedScreen() {
       return newSet;
     });
 
-    setPosts(prev => prev.map(post => {
-      if (post.id === postId) {
-        return {
-          ...post,
-          likes_count: (post.likes_count || 0) + (isLiked ? -1 : 1),
-        };
-      }
-      return post;
-    }));
-
-    // Make API call
-    if (isLiked) {
-      await unlikePost(user.id, postId);
-    } else {
-      await likePost(user.id, postId);
-    }
-  };
+    // Use mutation for like/unlike
+    likePostMutation.mutate({ postId, isLiked });
+  }, [user, likedPosts, likePostMutation]);
 
   const handlePostOptions = (postId: string) => {
     Alert.alert(
@@ -337,19 +338,16 @@ export default function FeedScreen() {
     );
   };
 
-  const handleDeletePost = async (postId: string) => {
-    try {
-      const success = await deletePost(postId);
-      if (success) {
-        setPosts(prev => prev.filter(p => p.id !== postId));
+  const handleDeletePost = (postId: string) => {
+    deletePostMutation.mutate(postId, {
+      onSuccess: () => {
         Alert.alert('Deleted', 'Your post has been deleted.');
-      } else {
+      },
+      onError: (error) => {
+        console.error('Error deleting post:', error);
         Alert.alert('Error', 'Failed to delete post. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error deleting post:', error);
-      Alert.alert('Error', 'Failed to delete post. Please try again.');
-    }
+      },
+    });
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -382,7 +380,11 @@ export default function FeedScreen() {
             onPress={() => router.push(`/user/${post.user_id}`)}
           >
             {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+              <ExpoImage 
+                source={{ uri: getAvatarUrl(profile.avatar_url) }} 
+                style={styles.avatar}
+                cachePolicy="disk"
+              />
             ) : (
               <View style={styles.avatarPlaceholder}>
                 <Text style={styles.avatarInitial}>
@@ -517,7 +519,9 @@ export default function FeedScreen() {
     </View>
   );
 
-  if (isLoading) {
+  // Only show loading spinner on first load with no cached data
+  // Skip loading state when restoring from cache to prevent flicker
+  if (isLoading && posts.length === 0) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#ffd33d" />
@@ -539,7 +543,7 @@ export default function FeedScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Posts List */}
+      {/* Posts List - Optimized for bandwidth */}
       <FlatList
         data={posts}
         renderItem={renderPost}
@@ -548,7 +552,7 @@ export default function FeedScreen() {
         ListEmptyComponent={renderEmptyState}
         refreshControl={
           <RefreshControl
-            refreshing={isRefreshing}
+            refreshing={isFetching && !isLoading}
             onRefresh={handleRefresh}
             tintColor="#ffd33d"
             colors={['#ffd33d']}
@@ -558,6 +562,9 @@ export default function FeedScreen() {
         viewabilityConfig={viewabilityConfig}
         onViewableItemsChanged={onViewableItemsChanged}
         removeClippedSubviews={true}
+        windowSize={5}
+        initialNumToRender={3}
+        maxToRenderPerBatch={3}
       />
     </View>
   );

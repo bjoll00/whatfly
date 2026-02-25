@@ -107,12 +107,6 @@ export default function TabLayout() {
           headerShown: false,
         }} 
       />
-      <Tabs.Screen 
-        name="feedback/index" 
-        options={{ 
-          href: null, // Hidden from tab bar, accessible via profile settings
-        }}
-      />
       <Tabs.Screen
         name="profile"
         options={{
@@ -137,13 +131,6 @@ export default function TabLayout() {
               />
             )
           ),
-        }}
-      />
-      {/* Hide the old settings tab */}
-      <Tabs.Screen
-        name="settings"
-        options={{
-          href: null, // This hides the tab from navigation
         }}
       />
     </Tabs>

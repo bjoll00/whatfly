@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { Image as ExpoImage } from 'expo-image';
+import { router } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
-    Image,
     RefreshControl,
     StyleSheet,
     Text,
@@ -12,73 +12,30 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useConversations, useSearchUsers } from '../../hooks/useConversations';
 import { useAuth } from '../../lib/AuthContext';
-import { Conversation, getUserConversations } from '../../lib/messagingService';
-import { supabase } from '../../lib/supabase';
+import { getAvatarUrl } from '../../lib/imageOptimization';
+import { Conversation } from '../../lib/messagingService';
 
 export default function MessagesScreen() {
   const { user } = useAuth();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
 
-  const loadConversations = useCallback(async () => {
-    if (!user) return;
-    
-    try {
-      const convs = await getUserConversations(user.id);
-      setConversations(convs);
-    } catch (error) {
-      console.error('Error loading conversations:', error);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [user]);
+  // TanStack Query hooks for data fetching with caching
+  const { data: conversations = [], isLoading, refetch, isFetching } = useConversations(user?.id ?? null);
+  const { data: searchResults = [], isLoading: isSearching } = useSearchUsers(searchQuery, user?.id ?? null);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadConversations();
-    }, [loadConversations])
-  );
+  const handleRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    loadConversations();
-  };
-
-  const handleSearch = async (query: string) => {
+  const handleSearch = (query: string) => {
     setSearchQuery(query);
-    
-    if (query.trim().length < 2) {
-      setSearchResults([]);
-      return;
-    }
-
-    setIsSearching(true);
-    try {
-      const { data: users } = await supabase
-        .from('profiles')
-        .select('id, username, avatar_url')
-        .ilike('username', `%${query}%`)
-        .neq('id', user?.id)
-        .limit(10);
-
-      setSearchResults(users || []);
-    } catch (error) {
-      console.error('Error searching users:', error);
-    } finally {
-      setIsSearching(false);
-    }
   };
 
   const handleStartConversation = (userId: string) => {
     router.push(`/conversation/${userId}`);
     setSearchQuery('');
-    setSearchResults([]);
   };
 
   const formatTime = (dateString: string) => {
@@ -107,7 +64,11 @@ export default function MessagesScreen() {
         onPress={() => router.push(`/conversation/${otherUser?.id}`)}
       >
         {otherUser?.avatar_url ? (
-          <Image source={{ uri: otherUser.avatar_url }} style={styles.avatar} />
+          <ExpoImage 
+            source={{ uri: getAvatarUrl(otherUser.avatar_url) }} 
+            style={styles.avatar}
+            cachePolicy="disk"
+          />
         ) : (
           <View style={styles.avatarPlaceholder}>
             <Text style={styles.avatarInitial}>
@@ -149,7 +110,11 @@ export default function MessagesScreen() {
       onPress={() => handleStartConversation(item.id)}
     >
       {item.avatar_url ? (
-        <Image source={{ uri: item.avatar_url }} style={styles.searchAvatar} />
+        <ExpoImage 
+          source={{ uri: getAvatarUrl(item.avatar_url) }} 
+          style={styles.searchAvatar}
+          cachePolicy="disk"
+        />
       ) : (
         <View style={styles.searchAvatarPlaceholder}>
           <Text style={styles.searchAvatarInitial}>
@@ -227,7 +192,7 @@ export default function MessagesScreen() {
 
       {/* Conversations List */}
       {searchQuery.length === 0 && (
-        isLoading ? (
+        isLoading && conversations.length === 0 ? (
           <ActivityIndicator size="large" color="#ffd33d" style={{ marginTop: 40 }} />
         ) : conversations.length === 0 ? (
           <View style={styles.emptyState}>
@@ -245,7 +210,7 @@ export default function MessagesScreen() {
             contentContainerStyle={styles.conversationsList}
             refreshControl={
               <RefreshControl
-                refreshing={isRefreshing}
+                refreshing={isFetching && !isLoading}
                 onRefresh={handleRefresh}
                 tintColor="#ffd33d"
               />

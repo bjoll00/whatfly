@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Modal,
   StyleSheet,
   Text,
@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
+import { getAvatarUrl } from '../lib/imageOptimization';
 import {
   FollowUser,
   followUser,
@@ -118,7 +119,11 @@ export default function FollowersModal({
           onPress={() => handleUserPress(item.id)}
         >
           {item.avatar_url ? (
-            <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+            <ExpoImage 
+              source={{ uri: getAvatarUrl(item.avatar_url) }} 
+              style={styles.avatar}
+              cachePolicy="disk"
+            />
           ) : (
             <View style={styles.avatarPlaceholder}>
               <Text style={styles.avatarInitial}>

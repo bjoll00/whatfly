@@ -158,10 +158,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
-    let hasInitialized = false;
+    let isInitializing = true;
     
     // Start auto refresh - ensures tokens are refreshed before expiry
     supabase.auth.startAutoRefresh();
+    
+    // Helper to load profile with timeout
+    const loadProfileWithTimeout = async (userId: string, timeoutMs = 5000) => {
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile load timeout')), timeoutMs)
+      );
+      
+      try {
+        await Promise.race([loadProfile(userId), timeoutPromise]);
+      } catch (e) {
+        console.warn('AuthContext: Profile load failed or timed out:', e);
+      }
+    };
     
     // Get initial session
     const initAuth = async () => {
@@ -174,18 +187,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         
         if (!isMounted) return;
-        hasInitialized = true;
         
         if (session?.user) {
           console.log('AuthContext: Found existing session for user:', session.user.id);
           setUser(session.user);
-          
-          // Load profile
-          try {
-            await loadProfile(session.user.id);
-          } catch (e) {
-            console.error('AuthContext: Error loading initial profile:', e);
-          }
+          await loadProfileWithTimeout(session.user.id);
         } else {
           console.log('AuthContext: No existing session found');
           setUser(null);
@@ -193,7 +199,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('AuthContext: Auth init error:', error);
       } finally {
+        isInitializing = false;
         if (isMounted) {
+          console.log('AuthContext: Init complete, setting loading to false');
           setLoading(false);
         }
       }
@@ -209,21 +217,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       console.log('AuthContext: Auth state changed:', event);
       
-      // Skip INITIAL_SESSION if we already initialized
-      if (event === 'INITIAL_SESSION' && hasInitialized) return;
-      
-      // Mark as initialized if this is the first event
-      if (event === 'INITIAL_SESSION') {
-        hasInitialized = true;
+      // Skip events during initialization - initAuth will handle it
+      if (isInitializing && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN')) {
+        console.log('AuthContext: Skipping event during initialization');
+        return;
       }
       
-      // Handle token refresh - just log it, session is already updated
+      // Handle token refresh - just update user, no loading state
       if (event === 'TOKEN_REFRESHED') {
         console.log('AuthContext: Token refreshed successfully');
         if (session?.user) {
           setUser(session.user);
         }
-        return; // Don't set loading state for token refresh
+        return;
       }
       
       // Handle explicit sign out
@@ -236,26 +242,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       
-      setLoading(true);
-      setUser(session?.user ?? null);
-      
-      // Handle user sign in
-      if (session?.user) {
+      // Handle sign in after initialization
+      if (event === 'SIGNED_IN' && session?.user) {
+        console.log('AuthContext: User signed in, loading profile...');
+        setLoading(true);
+        setUser(session.user);
         setIsGuest(false);
         storage.removeItem(GUEST_MODE_KEY).catch(() => {});
         
-        try {
-          await loadProfile(session.user.id);
-        } catch (e) {
-          console.error('AuthContext: Error loading profile after auth change:', e);
+        await loadProfileWithTimeout(session.user.id);
+        
+        if (isMounted) {
+          setLoading(false);
         }
-      } else {
-        setProfile(null);
-        setNeedsUsername(false);
-      }
-      
-      if (isMounted) {
-        setLoading(false);
       }
     });
 

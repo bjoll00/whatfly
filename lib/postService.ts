@@ -1,5 +1,6 @@
 import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Video } from 'react-native-compressor';
 import { supabase } from './supabase';
 
@@ -71,24 +72,50 @@ export interface CreatePostInput {
   media?: MediaItem[]; // Array of media items (images and videos)
 }
 
-// Upload image to Supabase storage
+// Compress image before upload to reduce bandwidth
+async function compressImage(uri: string, maxSize: number = 1200): Promise<string> {
+  try {
+    console.log('🖼️ Compressing image...');
+    
+    const manipulatedImage = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: maxSize } }],
+      { 
+        compress: 0.8, 
+        format: ImageManipulator.SaveFormat.JPEG 
+      }
+    );
+    
+    console.log('✅ Image compressed');
+    return manipulatedImage.uri;
+  } catch (error) {
+    console.error('❌ Image compression failed, using original:', error);
+    return uri;
+  }
+}
+
+// Upload image to Supabase storage (with compression)
 async function uploadPostImage(uri: string, postId: string, index: number): Promise<string | null> {
   try {
-    const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
-    const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-    const fileName = `${postId}/${Date.now()}-${index}.${ext}`;
+    // Compress image first to reduce file size
+    const compressedUri = await compressImage(uri);
+    
+    // Always use jpg for compressed output
+    const fileName = `${postId}/${Date.now()}-${index}.jpg`;
+    const contentType = 'image/jpeg';
 
     // Read the file as base64
-    const base64 = await FileSystem.readAsStringAsync(uri, {
+    const base64 = await FileSystem.readAsStringAsync(compressedUri, {
       encoding: 'base64',
     });
 
-    // Upload to Supabase storage
+    // Upload to Supabase storage with 1-year cache
     const { error: uploadError } = await supabase.storage
       .from('post-images')
       .upload(fileName, decode(base64), {
         contentType,
         upsert: true,
+        cacheControl: '31536000', // 1 year cache for CDN
       });
 
     if (uploadError) {
@@ -96,7 +123,7 @@ async function uploadPostImage(uri: string, postId: string, index: number): Prom
       return null;
     }
 
-    // Get the public URL
+    // Get the public URL (not signed URL - better for CDN caching)
     const { data: urlData } = supabase.storage
       .from('post-images')
       .getPublicUrl(fileName);
@@ -164,12 +191,13 @@ async function uploadPostVideo(
       encoding: 'base64',
     });
 
-    // Upload to Supabase storage
+    // Upload to Supabase storage with 1-year cache
     const { error: uploadError } = await supabase.storage
       .from('post-images')
       .upload(fileName, decode(base64), {
         contentType,
         upsert: true,
+        cacheControl: '31536000', // 1 year cache for CDN
       });
 
     if (uploadError) {
@@ -177,7 +205,7 @@ async function uploadPostVideo(
       return null;
     }
 
-    // Get the public URL
+    // Get the public URL (not signed URL - better for CDN caching)
     const { data: urlData } = supabase.storage
       .from('post-images')
       .getPublicUrl(fileName);

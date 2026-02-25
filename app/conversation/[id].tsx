@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { RealtimeChannel } from '@supabase/supabase-js';
+import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
-    Image,
     KeyboardAvoidingView,
     Platform,
     StyleSheet,
@@ -14,15 +13,13 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useMessages, useSendMessage } from '../../hooks/useMessages';
 import { useAuth } from '../../lib/AuthContext';
+import { getAvatarUrl } from '../../lib/imageOptimization';
 import {
-    getConversationMessages,
     getOrCreateConversation,
     markConversationAsRead,
     Message,
-    sendMessage,
-    subscribeToConversation,
-    unsubscribeFromConversation,
 } from '../../lib/messagingService';
 import { supabase } from '../../lib/supabase';
 
@@ -38,16 +35,17 @@ export default function ConversationScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null);
   const [newMessage, setNewMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSending, setIsSending] = useState(false);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
 
-  // Load other user's profile and conversation
+  // TanStack Query hooks for messages with Realtime
+  const { data: messages = [], isLoading: isLoadingMessages } = useMessages(conversationId, user?.id ?? null);
+  const sendMessageMutation = useSendMessage(conversationId, user?.id ?? null);
+
+  // Initialize conversation and load other user's profile
   useEffect(() => {
-    const loadData = async () => {
+    const initConversation = async () => {
       if (!user || !otherUserId) return;
 
       try {
@@ -66,55 +64,28 @@ export default function ConversationScreen() {
         const convId = await getOrCreateConversation(user.id, otherUserId);
         if (convId) {
           setConversationId(convId);
-
-          // Load messages
-          const msgs = await getConversationMessages(convId);
-          setMessages(msgs);
-
           // Mark as read
           await markConversationAsRead(convId, user.id);
-
-          // Subscribe to new messages
-          channelRef.current = subscribeToConversation(convId, (newMsg) => {
-            setMessages((prev) => {
-              // Check if this message already exists (from optimistic update or duplicate)
-              const exists = prev.some((m) => m.id === newMsg.id);
-              if (exists) {
-                // Replace existing message with server version
-                return prev.map((m) => m.id === newMsg.id ? newMsg : m);
-              }
-              // Skip if it's our own message (already added optimistically)
-              if (newMsg.sender_id === user.id) {
-                // Check if we have a temp message that matches this one
-                const tempMsg = prev.find((m) => m.id.startsWith('temp-') && m.content === newMsg.content);
-                if (tempMsg) {
-                  return prev.map((m) => m.id === tempMsg.id ? newMsg : m);
-                }
-              }
-              return [...prev, newMsg];
-            });
-            // Mark as read if from other user
-            if (newMsg.sender_id !== user.id) {
-              markConversationAsRead(convId, user.id);
-            }
-          });
         }
       } catch (error) {
-        console.error('Error loading conversation:', error);
+        console.error('Error initializing conversation:', error);
       } finally {
-        setIsLoading(false);
+        setIsInitializing(false);
       }
     };
 
-    loadData();
-
-    // Cleanup subscription on unmount
-    return () => {
-      if (channelRef.current) {
-        unsubscribeFromConversation(channelRef.current);
-      }
-    };
+    initConversation();
   }, [user, otherUserId]);
+
+  // Mark messages as read when new ones from other user arrive
+  useEffect(() => {
+    if (!conversationId || !user || messages.length === 0) return;
+    
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && lastMessage.sender_id !== user.id) {
+      markConversationAsRead(conversationId, user.id);
+    }
+  }, [messages.length, conversationId, user]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -125,49 +96,24 @@ export default function ConversationScreen() {
     }
   }, [messages.length]);
 
-  const handleSend = async () => {
-    if (!newMessage.trim() || !conversationId || !user || isSending) return;
+  const handleSend = () => {
+    if (!newMessage.trim() || !conversationId || !user || sendMessageMutation.isPending) return;
 
     const messageContent = newMessage.trim();
     setNewMessage('');
-    setIsSending(true);
 
-    // Optimistically add message to UI immediately
-    const optimisticMessage: Message = {
-      id: `temp-${Date.now()}`,
-      conversation_id: conversationId,
-      sender_id: user.id,
-      content: messageContent,
-      created_at: new Date().toISOString(),
-      is_read: false,
-      sender: {
-        id: user.id,
-        username: 'You',
-        avatar_url: null,
-      },
-    };
-    setMessages((prev) => [...prev, optimisticMessage]);
-
-    try {
-      const sent = await sendMessage(conversationId, user.id, messageContent);
-      if (!sent) {
-        // If failed, remove optimistic message and restore input
-        setMessages((prev) => prev.filter((m) => m.id !== optimisticMessage.id));
-        setNewMessage(messageContent);
-      } else {
-        // Replace optimistic message with real one
-        setMessages((prev) => 
-          prev.map((m) => m.id === optimisticMessage.id ? { ...sent, sender: optimisticMessage.sender } : m)
-        );
+    sendMessageMutation.mutate(
+      { content: messageContent },
+      {
+        onError: () => {
+          // Restore message on error
+          setNewMessage(messageContent);
+        },
       }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticMessage.id));
-      setNewMessage(messageContent);
-    } finally {
-      setIsSending(false);
-    }
+    );
   };
+
+  const isLoading = isInitializing || isLoadingMessages;
 
   const formatMessageTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -205,7 +151,11 @@ export default function ConversationScreen() {
         <View style={[styles.messageRow, isOwnMessage ? styles.ownMessageRow : styles.otherMessageRow]}>
           {!isOwnMessage && (
             otherUser?.avatar_url ? (
-              <Image source={{ uri: otherUser.avatar_url }} style={styles.messageAvatar} />
+              <ExpoImage 
+                source={{ uri: getAvatarUrl(otherUser.avatar_url) }} 
+                style={styles.messageAvatar}
+                cachePolicy="disk"
+              />
             ) : (
               <View style={styles.messageAvatarPlaceholder}>
                 <Text style={styles.messageAvatarInitial}>
@@ -275,7 +225,11 @@ export default function ConversationScreen() {
           onPress={() => router.push(`/user/${otherUserId}`)}
         >
           {otherUser?.avatar_url ? (
-            <Image source={{ uri: otherUser.avatar_url }} style={styles.headerAvatar} />
+            <ExpoImage 
+              source={{ uri: getAvatarUrl(otherUser.avatar_url) }} 
+              style={styles.headerAvatar}
+              cachePolicy="disk"
+            />
           ) : (
             <View style={styles.headerAvatarPlaceholder}>
               <Text style={styles.headerAvatarInitial}>
@@ -320,9 +274,9 @@ export default function ConversationScreen() {
         <TouchableOpacity
           style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
           onPress={handleSend}
-          disabled={!newMessage.trim() || isSending}
+          disabled={!newMessage.trim() || sendMessageMutation.isPending}
         >
-          {isSending ? (
+          {sendMessageMutation.isPending ? (
             <ActivityIndicator size="small" color="#25292e" />
           ) : (
             <Ionicons name="send" size={20} color="#25292e" />

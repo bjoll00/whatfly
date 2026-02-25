@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -22,6 +22,26 @@ import { useFishing } from '../lib/FishingContext';
 import { createPost, MediaItem, VideoProgressCallback } from '../lib/postService';
 
 const MAX_MEDIA = 4;
+
+// Video preview component using expo-video
+const VideoPreviewItem = ({ uri, style }: { uri: string; style: any }) => {
+  const player = useVideoPlayer(
+    { uri },
+    (player) => {
+      player.muted = true;
+      player.loop = false;
+    }
+  );
+
+  return (
+    <VideoView
+      player={player}
+      style={style}
+      contentFit="cover"
+      nativeControls={false}
+    />
+  );
+};
 
 export default function CreatePostScreen() {
   const { user } = useAuth();
@@ -235,13 +255,7 @@ export default function CreatePostScreen() {
               <View key={index} style={styles.imageContainer}>
                 {item.isVideo ? (
                   <View style={styles.videoContainer}>
-                    <Video
-                      source={{ uri: item.uri }}
-                      style={styles.image}
-                      resizeMode={ResizeMode.COVER}
-                      shouldPlay={false}
-                      isMuted={true}
-                    />
+                    <VideoPreviewItem uri={item.uri} style={styles.image} />
                     <View style={styles.videoOverlay}>
                       <Ionicons name="videocam" size={24} color="#fff" />
                     </View>

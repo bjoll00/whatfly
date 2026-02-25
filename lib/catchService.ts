@@ -115,12 +115,13 @@ async function uploadCatchPhoto(uri: string, catchId: string): Promise<string | 
       encoding: 'base64',
     });
 
-    // Upload to Supabase storage
+    // Upload to Supabase storage with 1-year cache
     const { error: uploadError } = await supabase.storage
       .from('post-images') // Reusing existing bucket
       .upload(fileName, decode(base64), {
         contentType,
         upsert: true,
+        cacheControl: '31536000', // 1 year cache for CDN
       });
 
     if (uploadError) {
@@ -128,7 +129,7 @@ async function uploadCatchPhoto(uri: string, catchId: string): Promise<string | 
       return null;
     }
 
-    // Get the public URL
+    // Get the public URL (not signed URL - better for CDN caching)
     const { data: urlData } = supabase.storage
       .from('post-images')
       .getPublicUrl(fileName);

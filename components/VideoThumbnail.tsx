@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   StyleSheet,
   View,
   ViewStyle,
 } from 'react-native';
+import { getThumbnailUrl } from '../lib/imageOptimization';
 
 interface VideoThumbnailProps {
   videoUrl: string;
@@ -103,12 +104,16 @@ export default function VideoThumbnail({
   }
 
   // Success - show thumbnail
+  // Use optimized URL if it's a Supabase storage URL, otherwise use local cache URI
+  const displayUrl = thumbnailUrl ? getThumbnailUrl(thumbnail) : thumbnail;
+  
   return (
     <View style={[styles.container, style]}>
-      <Image 
-        source={{ uri: thumbnail }} 
+      <ExpoImage 
+        source={{ uri: displayUrl }} 
         style={styles.thumbnail}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="disk"
       />
       {showPlayIcon && (
         <View style={styles.playBadge}>

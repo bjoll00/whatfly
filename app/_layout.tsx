@@ -1,8 +1,10 @@
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Linking } from 'react-native';
 import { AuthProvider } from '../lib/AuthContext';
 import { FishingProvider } from '../lib/FishingContext';
+import { asyncStoragePersister, queryClient } from '../lib/queryClient';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -38,27 +40,32 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <FishingProvider>
+      <PersistQueryClientProvider 
+        client={queryClient} 
+        persistOptions={{ persister: asyncStoragePersister }}
+      >
+        <FishingProvider>
         <Stack>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="auth" options={{ headerShown: false }} />
-          <Stack.Screen name="debug" options={{ title: 'Debug' }} />
-          <Stack.Screen name="admin-feedback" options={{ title: 'Admin - Feedback Management' }} />
-          <Stack.Screen name="test-feedback-permissions" options={{ title: 'Test Feedback Permissions' }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="admin-feedback" options={{ title: 'Admin - Feedback Management' }} />
           <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
           <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="post/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="create-post" options={{ headerShown: false }} />
           <Stack.Screen name="conversation/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="edit-post/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="settings" options={{ headerShown: false }} />
           <Stack.Screen name="feedback" options={{ headerShown: false }} />
           <Stack.Screen name="privacy-policy" options={{ headerShown: false }} />
           <Stack.Screen name="terms-of-service" options={{ headerShown: false }} />
           <Stack.Screen name="log-catch" options={{ headerShown: false }} />
+          <Stack.Screen name="username-setup" options={{ headerShown: false }} />
+          <Stack.Screen name="reset-password" options={{ headerShown: false }} />
         </Stack>
-      </FishingProvider>
+        </FishingProvider>
+      </PersistQueryClientProvider>
     </AuthProvider>
   );
 }

@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av';
+import { Image as ExpoImage } from 'expo-image';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -17,6 +18,7 @@ import {
     View,
 } from 'react-native';
 import { useAuth } from '../../lib/AuthContext';
+import { getAvatarUrl, getFeedImageUrl } from '../../lib/imageOptimization';
 import {
     addComment,
     Comment,
@@ -32,6 +34,30 @@ import { supabase } from '../../lib/supabase';
 
 const { width: screenWidth } = Dimensions.get('window');
 const MAX_IMAGE_HEIGHT = screenWidth * 1.25; // Cap height at 1.25x width
+
+// Video player component for post detail using expo-video
+const PostDetailVideoPlayer = ({ videoUrl, height }: { videoUrl: string; height: number }) => {
+  const player = useVideoPlayer(
+    {
+      uri: videoUrl,
+      metadata: {
+        title: 'Post Video',
+      },
+    },
+    (player) => {
+      player.loop = false;
+    }
+  );
+
+  return (
+    <VideoView
+      player={player}
+      style={[detailMediaStyles.video, { height }]}
+      contentFit="contain"
+      nativeControls={true}
+    />
+  );
+};
 
 // Component to render media with proper aspect ratio in post detail
 const PostDetailMediaItem = ({ item }: { item: PostImage }) => {
@@ -62,14 +88,7 @@ const PostDetailMediaItem = ({ item }: { item: PostImage }) => {
   if (item.is_video) {
     return (
       <View style={[detailMediaStyles.mediaContainer, { height: imageHeight }]}>
-        <Video
-          source={{ uri: item.image_url }}
-          style={[detailMediaStyles.video, { height: imageHeight }]}
-          resizeMode={ResizeMode.CONTAIN}
-          useNativeControls
-          shouldPlay={false}
-          isLooping={false}
-        />
+        <PostDetailVideoPlayer videoUrl={item.image_url} height={imageHeight} />
       </View>
     );
   }
@@ -81,10 +100,11 @@ const PostDetailMediaItem = ({ item }: { item: PostImage }) => {
           <ActivityIndicator size="small" color="#ffd33d" />
         </View>
       )}
-      <Image
-        source={{ uri: item.image_url }}
+      <ExpoImage
+        source={{ uri: getFeedImageUrl(item.image_url) }}
         style={[detailMediaStyles.image, { height: imageHeight }]}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="disk"
         onLoad={() => setIsLoading(false)}
       />
     </View>
@@ -305,7 +325,11 @@ export default function PostDetailScreen() {
     return (
       <View style={styles.commentItem}>
         {commentProfile?.avatar_url ? (
-          <Image source={{ uri: commentProfile.avatar_url }} style={styles.commentAvatar} />
+          <ExpoImage 
+            source={{ uri: getAvatarUrl(commentProfile.avatar_url) }} 
+            style={styles.commentAvatar}
+            cachePolicy="disk"
+          />
         ) : (
           <View style={styles.commentAvatarPlaceholder}>
             <Text style={styles.commentAvatarInitial}>
@@ -344,7 +368,11 @@ export default function PostDetailScreen() {
             onPress={() => router.push(`/user/${post.user_id}`)}
           >
             {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+              <ExpoImage 
+                source={{ uri: getAvatarUrl(profile.avatar_url) }} 
+                style={styles.avatar}
+                cachePolicy="disk"
+              />
             ) : (
               <View style={styles.avatarPlaceholder}>
                 <Text style={styles.avatarInitial}>

@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import { Image as ExpoImage } from 'expo-image';
+import { router } from 'expo-router';
+import React, { useMemo, useState } from 'react';
 import {
     ActivityIndicator,
-    Image,
     KeyboardAvoidingView,
     Linking,
     Platform,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -15,58 +16,38 @@ import {
 } from 'react-native';
 import FollowersModal from '../../components/FollowersModal';
 import VideoThumbnail from '../../components/VideoThumbnail';
+import { useUserCatches, useCatchStats } from '../../hooks/useCatches';
+import { useUserPosts } from '../../hooks/useFeed';
+import { useFollowCounts } from '../../hooks/useProfile';
 import { useAuth } from '../../lib/AuthContext';
-import { Catch, getCatchStats, getUserCatches } from '../../lib/catchService';
-import { getFollowCounts, getUserPosts, Post } from '../../lib/postService';
+import { getAvatarUrl, getThumbnailUrl } from '../../lib/imageOptimization';
+import { Post } from '../../lib/postService';
 
 export default function ProfileScreen() {
   const { user, profile, needsUsername } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [catches, setCatches] = useState<Catch[]>([]);
-  const [catchStats, setCatchStats] = useState<{
-    totalCatches: number;
-    speciesCount: number;
-    topSpecies: string | null;
-    largestCatch: { species: string; length: number; weight: number } | null;
-  }>({ totalCatches: 0, speciesCount: 0, topSpecies: null, largestCatch: null });
-  const [isLoadingPosts, setIsLoadingPosts] = useState(false);
-  const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
   const [activePostTab, setActivePostTab] = useState<'photos' | 'thoughts' | 'catches'>('photos');
   const [showFollowersModal, setShowFollowersModal] = useState(false);
   const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
 
+  // TanStack Query hooks for data fetching with caching
+  const { data: posts = [], isLoading: isLoadingPosts, refetch: refetchPosts, isFetching: isFetchingPosts } = useUserPosts(user?.id ?? null);
+  const { data: followCounts = { followers: 0, following: 0 }, refetch: refetchFollowCounts, isFetching: isFetchingFollowCounts } = useFollowCounts(user?.id ?? null);
+  const { data: catches = [], refetch: refetchCatches, isFetching: isFetchingCatches } = useUserCatches(user?.id ?? null);
+  const { data: catchStats = { totalCatches: 0, speciesCount: 0, topSpecies: null, largestCatch: null }, refetch: refetchCatchStats } = useCatchStats(user?.id ?? null);
+
+  // Check if any data is being fetched
+  const isFetching = isFetchingPosts || isFetchingFollowCounts || isFetchingCatches;
+
   // Filter posts into photos (with images) and thoughts (without images)
-  const photoPosts = posts.filter(post => post.post_images && post.post_images.length > 0);
-  const thoughtPosts = posts.filter(post => !post.post_images || post.post_images.length === 0);
+  const photoPosts = useMemo(() => posts.filter(post => post.post_images && post.post_images.length > 0), [posts]);
+  const thoughtPosts = useMemo(() => posts.filter(post => !post.post_images || post.post_images.length === 0), [posts]);
 
-  // Load posts when screen is focused
-  useFocusEffect(
-    useCallback(() => {
-      if (user && profile) {
-        loadUserData();
-      }
-    }, [user, profile])
-  );
-
-  const loadUserData = async () => {
-    if (!user) return;
-    setIsLoadingPosts(true);
-    try {
-      const [userPosts, counts, userCatches, stats] = await Promise.all([
-        getUserPosts(user.id),
-        getFollowCounts(user.id),
-        getUserCatches(user.id),
-        getCatchStats(user.id),
-      ]);
-      setPosts(userPosts);
-      setFollowCounts(counts);
-      setCatches(userCatches);
-      setCatchStats(stats);
-    } catch (error) {
-      console.error('Error loading user data:', error);
-    } finally {
-      setIsLoadingPosts(false);
-    }
+  // Refresh all data
+  const handleRefresh = () => {
+    refetchPosts();
+    refetchFollowCounts();
+    refetchCatches();
+    refetchCatchStats();
   };
 
   const openFollowersModal = (tab: 'followers' | 'following') => {
@@ -203,7 +184,17 @@ export default function ProfileScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={isFetching && !isLoadingPosts}
+            onRefresh={handleRefresh}
+            tintColor="#ffd33d"
+            colors={['#ffd33d']}
+          />
+        }
+      >
         <View style={styles.content}>
           {/* Settings Button - Upper Right */}
           <TouchableOpacity 
@@ -223,7 +214,11 @@ export default function ProfileScreen() {
               onPress={() => router.push('/edit-profile')}
             >
               {profile?.avatar_url ? (
-                <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+                <ExpoImage 
+                  source={{ uri: getAvatarUrl(profile.avatar_url, 'large') }} 
+                  style={styles.avatar}
+                  cachePolicy="disk"
+                />
               ) : (
                 <View style={styles.avatarPlaceholder}>
                   <Text style={styles.avatarInitial}>
@@ -315,7 +310,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
             
-            {isLoadingPosts ? (
+            {isLoadingPosts && posts.length === 0 ? (
               <ActivityIndicator size="small" color="#ffd33d" style={{ marginVertical: 20 }} />
             ) : activePostTab === 'photos' ? (
               // Photos Grid
@@ -350,7 +345,12 @@ export default function ProfileScreen() {
                             showPlayIcon={true}
                           />
                         ) : firstMedia?.image_url ? (
-                          <Image source={{ uri: firstMedia.image_url }} style={styles.thumbnailImage} />
+                          <ExpoImage 
+                            source={{ uri: getThumbnailUrl(firstMedia.image_url) }} 
+                            style={styles.thumbnailImage}
+                            cachePolicy="disk"
+                            contentFit="cover"
+                          />
                         ) : (
                           <View style={styles.thumbnailPlaceholder}>
                             <Ionicons name="image-outline" size={24} color="#666" />
@@ -448,7 +448,12 @@ export default function ProfileScreen() {
                       <View key={catchItem.id} style={styles.catchCard}>
                         <View style={styles.catchCardContent}>
                           {catchItem.photo_url ? (
-                            <Image source={{ uri: catchItem.photo_url }} style={styles.catchPhoto} />
+                            <ExpoImage 
+                              source={{ uri: getThumbnailUrl(catchItem.photo_url) }} 
+                              style={styles.catchPhoto}
+                              cachePolicy="disk"
+                              contentFit="cover"
+                            />
                           ) : (
                             <View style={styles.catchPhotoPlaceholder}>
                               <Ionicons name="fish" size={24} color="#666" />

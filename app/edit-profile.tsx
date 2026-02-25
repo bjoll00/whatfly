@@ -149,12 +149,13 @@ export default function EditProfileScreen() {
         encoding: 'base64',
       });
 
-      // Convert base64 to ArrayBuffer and upload
+      // Convert base64 to ArrayBuffer and upload with 1-year cache
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(fileName, decode(base64), {
           contentType,
           upsert: true,
+          cacheControl: '31536000', // 1 year cache for CDN
         });
 
       if (uploadError) {
@@ -163,7 +164,7 @@ export default function EditProfileScreen() {
         return;
       }
 
-      // Get the public URL
+      // Get the public URL (not signed URL - better for CDN caching)
       const { data: urlData } = supabase.storage
         .from('avatars')
         .getPublicUrl(fileName);

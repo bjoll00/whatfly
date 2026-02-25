@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     ActivityIndicator,
-    Image,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -11,110 +12,53 @@ import {
     View,
 } from 'react-native';
 import VideoThumbnail from '../../components/VideoThumbnail';
+import { useUserPosts } from '../../hooks/useFeed';
+import { useUserProfile, useFollowCounts, useIsFollowing, useFollowUser } from '../../hooks/useProfile';
 import { useAuth } from '../../lib/AuthContext';
-import {
-    followUser,
-    getFollowCounts,
-    getUserPosts,
-    isFollowing,
-    Post,
-    unfollowUser,
-} from '../../lib/postService';
-import { supabase } from '../../lib/supabase';
-
-interface UserProfile {
-  id: string;
-  username: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  bio: string | null;
-  location: string | null;
-  fishing_experience: string | null;
-}
+import { getAvatarUrl, getThumbnailUrl } from '../../lib/imageOptimization';
+import { Post } from '../../lib/postService';
 
 export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
-  const [isUserFollowing, setIsUserFollowing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [activePostTab, setActivePostTab] = useState<'photos' | 'thoughts'>('photos');
-
-  // Filter posts into photos (with images) and thoughts (without images)
-  const photoPosts = posts.filter(post => post.post_images && post.post_images.length > 0);
-  const thoughtPosts = posts.filter(post => !post.post_images || post.post_images.length === 0);
 
   const isOwnProfile = user?.id === id;
 
-  const loadUserData = useCallback(async () => {
-    if (!id) return;
+  // TanStack Query hooks for data fetching with caching
+  const { data: userProfile, isLoading: isLoadingProfile, refetch: refetchProfile } = useUserProfile(id ?? null);
+  const { data: posts = [], isLoading: isLoadingPosts, refetch: refetchPosts, isFetching: isFetchingPosts } = useUserPosts(id ?? null);
+  const { data: followCounts = { followers: 0, following: 0 }, refetch: refetchFollowCounts, isFetching: isFetchingFollowCounts } = useFollowCounts(id ?? null);
+  const { data: isUserFollowing = false, refetch: refetchIsFollowing } = useIsFollowing(user?.id ?? null, id ?? null);
+  const followUserMutation = useFollowUser();
 
-    try {
-      // Fetch profile
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', id)
-        .single();
+  const isLoading = isLoadingProfile || isLoadingPosts;
+  const isFetching = isFetchingPosts || isFetchingFollowCounts;
 
-      if (error) {
-        console.error('Error loading profile:', error);
-        return;
-      }
+  // Filter posts into photos (with images) and thoughts (without images)
+  const photoPosts = useMemo(() => posts.filter(post => post.post_images && post.post_images.length > 0), [posts]);
+  const thoughtPosts = useMemo(() => posts.filter(post => !post.post_images || post.post_images.length === 0), [posts]);
 
-      setUserProfile(profile);
-
-      // Fetch posts and follow counts
-      const [userPosts, counts] = await Promise.all([
-        getUserPosts(id),
-        getFollowCounts(id),
-      ]);
-
-      setPosts(userPosts);
-      setFollowCounts(counts);
-
-      // Check if current user is following this user
-      if (user && !isOwnProfile) {
-        const following = await isFollowing(user.id, id);
-        setIsUserFollowing(following);
-      }
-    } catch (error) {
-      console.error('Error loading user data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id, user, isOwnProfile]);
-
-  useEffect(() => {
-    loadUserData();
-  }, [loadUserData]);
-
-  const handleFollowToggle = async () => {
-    if (!user || !id || isOwnProfile) return;
-
-    setIsFollowLoading(true);
-    try {
-      if (isUserFollowing) {
-        await unfollowUser(user.id, id);
-        setIsUserFollowing(false);
-        setFollowCounts(prev => ({ ...prev, followers: prev.followers - 1 }));
-      } else {
-        await followUser(user.id, id);
-        setIsUserFollowing(true);
-        setFollowCounts(prev => ({ ...prev, followers: prev.followers + 1 }));
-      }
-    } catch (error) {
-      console.error('Error toggling follow:', error);
-    } finally {
-      setIsFollowLoading(false);
-    }
+  // Refresh all data
+  const handleRefresh = () => {
+    refetchProfile();
+    refetchPosts();
+    refetchFollowCounts();
+    refetchIsFollowing();
   };
 
-  if (isLoading) {
+  const handleFollowToggle = () => {
+    if (!user || !id || isOwnProfile) return;
+
+    followUserMutation.mutate({
+      currentUserId: user.id,
+      targetUserId: id,
+      isCurrentlyFollowing: isUserFollowing,
+    });
+  };
+
+  // Only show loading on first load when we have no cached data
+  if (isLoading && !userProfile) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#ffd33d" />
@@ -140,30 +84,44 @@ export default function UserProfileScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>@{userProfile.username}</Text>
+        <Text style={styles.headerTitle}>@{userProfile?.username}</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isFetching && !isLoading}
+            onRefresh={handleRefresh}
+            tintColor="#ffd33d"
+            colors={['#ffd33d']}
+          />
+        }
+      >
         {/* Profile Header */}
         <View style={styles.profileHeader}>
-          {userProfile.avatar_url ? (
-            <Image source={{ uri: userProfile.avatar_url }} style={styles.avatar} />
+          {userProfile?.avatar_url ? (
+            <ExpoImage 
+              source={{ uri: getAvatarUrl(userProfile.avatar_url, 'large') }} 
+              style={styles.avatar}
+              cachePolicy="disk"
+            />
           ) : (
             <View style={styles.avatarPlaceholder}>
               <Text style={styles.avatarInitial}>
-                {userProfile.username[0]?.toUpperCase() || '?'}
+                {userProfile?.username?.[0]?.toUpperCase() || '?'}
               </Text>
             </View>
           )}
 
-          <Text style={styles.username}>@{userProfile.username}</Text>
+          <Text style={styles.username}>@{userProfile?.username}</Text>
           
-          {userProfile.bio && (
+          {userProfile?.bio && (
             <Text style={styles.bio}>{userProfile.bio}</Text>
           )}
 
-          {userProfile.location && (
+          {userProfile?.location && (
             <View style={styles.locationRow}>
               <Ionicons name="location-outline" size={16} color="#999" />
               <Text style={styles.locationText}>{userProfile.location}</Text>
@@ -179,9 +137,9 @@ export default function UserProfileScreen() {
                   isUserFollowing && styles.followingButton,
                 ]}
                 onPress={handleFollowToggle}
-                disabled={isFollowLoading}
+                disabled={followUserMutation.isPending}
               >
-                {isFollowLoading ? (
+                {followUserMutation.isPending ? (
                   <ActivityIndicator size="small" color={isUserFollowing ? '#ffd33d' : '#25292e'} />
                 ) : (
                   <Text style={[
@@ -292,7 +250,12 @@ export default function UserProfileScreen() {
                           showPlayIcon={true}
                         />
                       ) : firstMedia?.image_url ? (
-                        <Image source={{ uri: firstMedia.image_url }} style={styles.thumbnailImage} />
+                        <ExpoImage 
+                          source={{ uri: getThumbnailUrl(firstMedia.image_url) }} 
+                          style={styles.thumbnailImage}
+                          cachePolicy="disk"
+                          contentFit="cover"
+                        />
                       ) : (
                         <View style={styles.thumbnailPlaceholder}>
                           <Ionicons name="image-outline" size={24} color="#666" />
