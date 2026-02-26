@@ -13,7 +13,7 @@ import {
 /**
  * Hook to fetch feed posts with caching
  */
-export function useFeedPosts(limit = 20) {
+export function useFeedPosts(limit = 10) {
   const { user } = useAuth();
 
   return useQuery({
@@ -87,10 +87,10 @@ export function useLikePost() {
       await queryClient.cancelQueries({ queryKey: ['feed'] });
       
       // Snapshot previous value
-      const previousFeed = queryClient.getQueryData<Post[]>(['feed', 20]);
+      const previousFeed = queryClient.getQueryData<Post[]>(['feed', 10]);
       
       // Optimistically update feed
-      queryClient.setQueryData<Post[]>(['feed', 20], (old) => {
+      queryClient.setQueryData<Post[]>(['feed', 10], (old) => {
         if (!old) return old;
         return old.map(post => {
           if (post.id === postId) {
@@ -108,7 +108,7 @@ export function useLikePost() {
     onError: (_, __, context) => {
       // Rollback on error
       if (context?.previousFeed) {
-        queryClient.setQueryData(['feed', 20], context.previousFeed);
+        queryClient.setQueryData(['feed', 10], context.previousFeed);
       }
     },
   });
@@ -128,7 +128,7 @@ export function useDeletePost() {
     },
     onSuccess: (deletedPostId) => {
       // Remove from feed cache
-      queryClient.setQueryData<Post[]>(['feed', 20], (old) => {
+      queryClient.setQueryData<Post[]>(['feed', 10], (old) => {
         if (!old) return old;
         return old.filter(post => post.id !== deletedPostId);
       });

@@ -236,7 +236,7 @@ export default function FeedScreen() {
   const [localLikedPosts, setLocalLikedPosts] = useState<Set<string>>(new Set());
 
   // TanStack Query hooks
-  const { data: posts = [], isLoading, refetch, isFetching } = useFeedPosts(20);
+  const { data: posts = [], isLoading, refetch, isFetching } = useFeedPosts(10);
   const postIds = useMemo(() => posts.map(p => p.id), [posts]);
   const { data: likedPostsFromServer } = useLikedPosts(user?.id ?? null, postIds);
   const likePostMutation = useLikePost();
